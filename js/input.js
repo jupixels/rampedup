@@ -93,7 +93,10 @@ export class Input {
     const pr = (i) => b(i) && !prev[i];
     const rl = (i) => !b(i) && prev[i];
     const dz = (v) => (Math.abs(v) < 0.15 ? 0 : (v - Math.sign(v) * 0.15) / 0.85);
-    const lx = dz(p.axes[0] || 0), ly = dz(p.axes[1] || 0), rx = dz(p.axes[2] || 0), ry = dz(p.axes[3] || 0);
+    const lx = dz(p.axes[0] || 0), ly = dz(p.axes[1] || 0);
+    // right stick (camera): wider dead zone so a worn/drifting stick can't spin the camera
+    const dzR = (v) => (Math.abs(v) < 0.3 ? 0 : (v - Math.sign(v) * 0.3) / 0.7);
+    const rx = dzR(p.axes[2] || 0), ry = dzR(p.axes[3] || 0);
     const any = Math.abs(lx) + Math.abs(ly) + Math.abs(rx) + Math.abs(ry) > 0 || p.buttons.some((x) => x.pressed);
     if (any) this.padActive = true;
     if (!this.padActive) { this.prevPad = p.buttons.map((x) => x.pressed); return; }

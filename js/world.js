@@ -11,10 +11,10 @@ import { getTex, leafTexture, pineTexture, waterNormalTexture, preloadTextures }
 
 // ---------------- Environment ----------------
 export const TIMES = {
-  golden:   { label: 'Golden Hour', elev: 17, azim: 228, turb: 4.5, ray: 1.9, mie: 0.004, mieG: 0.78, sun: 0xffd6a8, sunI: 3.9, hemiSky: 0x9fb8e8, hemiGround: 0x5a4a36, hemiI: 0.3, fog: 0xbfb3a4, fogD: 0.0008, exp: 0.72, env: 0.15, cloud: [1.0, 0.86, 0.72] },
-  midday:   { label: 'Midday',      elev: 58, azim: 160, turb: 3.2, ray: 1.1, mie: 0.004, mieG: 0.8,  sun: 0xfff4e6, sunI: 3.6, hemiSky: 0xa9c8ef, hemiGround: 0x5d5642, hemiI: 0.3, fog: 0xb4c9de, fogD: 0.0007, exp: 0.58, env: 0.2, cloud: [1, 1, 1] },
-  sunset:   { label: 'Sunset',      elev: 3.2, azim: 248, turb: 8.5, ray: 2.8, mie: 0.01, mieG: 0.88, sun: 0xff9e62, sunI: 2.6, hemiSky: 0x8a8fc4, hemiGround: 0x4a3830, hemiI: 0.28, fog: 0xc89a84, fogD: 0.001, exp: 0.85, env: 0.13, cloud: [1.0, 0.62, 0.5] },
-  overcast: { label: 'Overcast',    elev: 40, azim: 190, turb: 18, ray: 0.35, mie: 0.04, mieG: 0.7,   sun: 0xe8ecf0, sunI: 0.9, hemiSky: 0xc9d1da, hemiGround: 0x5a5a52, hemiI: 0.9, fog: 0xaeb4ba, fogD: 0.0016, exp: 0.78, env: 0.45, cloud: [0.78, 0.8, 0.83] },
+  golden:   { label: 'Golden Hour', elev: 17, azim: 228, turb: 4.5, ray: 1.9, mie: 0.0025, mieG: 0.7, sun: 0xffd6a8, sunI: 2.1, hemiSky: 0x9fb8e8, hemiGround: 0x5a4a36, hemiI: 0.42, fog: 0xbfb3a4, fogD: 0.0008, exp: 0.72, env: 0.15, cloud: [1.0, 0.86, 0.72] },
+  midday:   { label: 'Midday',      elev: 58, azim: 160, turb: 3.2, ray: 1.1, mie: 0.0025, mieG: 0.7,  sun: 0xfff4e6, sunI: 2.0, hemiSky: 0xa9c8ef, hemiGround: 0x5d5642, hemiI: 0.42, fog: 0xb4c9de, fogD: 0.0007, exp: 0.58, env: 0.2, cloud: [1, 1, 1] },
+  sunset:   { label: 'Sunset',      elev: 3.2, azim: 248, turb: 8.5, ray: 2.8, mie: 0.005, mieG: 0.78, sun: 0xff9e62, sunI: 1.5, hemiSky: 0x8a8fc4, hemiGround: 0x4a3830, hemiI: 0.38, fog: 0xc89a84, fogD: 0.001, exp: 0.85, env: 0.13, cloud: [1.0, 0.62, 0.5] },
+  overcast: { label: 'Overcast',    elev: 40, azim: 190, turb: 18, ray: 0.35, mie: 0.04, mieG: 0.7,   sun: 0xe8ecf0, sunI: 0.6, hemiSky: 0xc9d1da, hemiGround: 0x5a5a52, hemiI: 0.9, fog: 0xaeb4ba, fogD: 0.0016, exp: 0.78, env: 0.45, cloud: [0.78, 0.8, 0.83] },
 };
 
 export class Environment {

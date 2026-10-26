@@ -127,7 +127,7 @@ class Game {
     dbg('player');
     this.player.spawn(SPAWN.x, SPAWN.z, SPAWN.yaw);
     this.cam = new ChaseCamera(this.camera, this.world.collision);
-    this.cam.mode = this.settings.cam || 'chase';
+    this.cam.mode = ['chase', 'far', 'helmet'].includes(this.settings.cam) ? this.settings.cam : 'chase';
     dbg('cam');
     this.courses = new Courses(this);
     dbg('courses');

@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { damp, dampAngle, clamp, angleDiff } from './util.js';
 import { makeGroundResult } from './collision.js';
 
-export const CAM_MODES = ['chase', 'far', 'helmet', 'cinematic'];
+export const CAM_MODES = ['chase', 'far', 'helmet'];
 
 export class ChaseCamera {
   constructor(camera, collision) {
