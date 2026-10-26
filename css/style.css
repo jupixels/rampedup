@@ -237,3 +237,36 @@ input:focus, select:focus { border-color: var(--accent); }
   .map-side { width: 90vw; }
   .net-badge { left: 12px; top: 96px; bottom: auto; }
 }
+
+/* ---------- v1.0 polish ---------- */
+#load-tip { max-width: min(560px, 86vw); text-align: center; font-size: 18px; color: var(--paper); opacity: 0.85; min-height: 2.6em; line-height: 1.35; }
+#load-tip b { color: var(--accent-2); text-transform: uppercase; letter-spacing: 0.06em; margin-right: 6px; }
+.level { display: flex; align-items: center; gap: 8px; margin-top: 4px; font-size: 15px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: var(--cyan); }
+.level i { display: block; width: 110px; height: 5px; background: rgba(255,255,255,0.14); transform: skewX(var(--skew)); overflow: hidden; }
+.level i b { display: block; height: 100%; width: 0; background: var(--cyan); transition: width .4s ease; }
+.combo-timer { width: 180px; height: 4px; margin: 6px auto 0; background: rgba(255,255,255,0.15); overflow: hidden; }
+.combo-timer i { display: block; height: 100%; width: 100%; background: var(--accent-2); transform-origin: left; }
+.xpgain { position: absolute; left: 22px; top: 150px; font-size: 16px; font-weight: 800; color: var(--cyan); text-transform: uppercase; letter-spacing: 0.06em; opacity: 0; }
+.xpgain.show { animation: xpg 1.6s ease forwards; }
+@keyframes xpg { 0% { opacity: 0; transform: translateY(6px); } 15% { opacity: 1; transform: none; } 75% { opacity: 1; } 100% { opacity: 0; transform: translateY(-8px); } }
+.levelup { position: absolute; left: 50%; top: 22%; transform: translateX(-50%); text-align: center; background: rgba(14,15,17,0.92); border: 1px solid var(--line); border-top: 6px solid var(--cyan); padding: 18px 30px 20px; min-width: 320px; animation: lvl 4.2s ease forwards; }
+.levelup h3 { margin: 0; font-family: var(--display); font-weight: 400; font-size: 54px; line-height: 1; text-transform: uppercase; color: var(--cyan); }
+.levelup p { margin: 6px 0 0; font-size: 18px; }
+.levelup ul { list-style: none; padding: 0; margin: 10px 0 0; display: flex; flex-direction: column; gap: 4px; font-size: 18px; font-weight: 700; text-transform: uppercase; }
+.levelup li::before { content: '+ '; color: var(--accent-2); }
+@keyframes lvl { 0% { opacity: 0; transform: translateX(-50%) scale(1.3); } 8% { opacity: 1; transform: translateX(-50%) scale(1); } 88% { opacity: 1; } 100% { opacity: 0; } }
+#photo { position: fixed; inset: auto 0 0 0; z-index: 18; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 0 16px max(16px, env(safe-area-inset-bottom, 0px)); pointer-events: none; }
+.photo-bar { pointer-events: auto; display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; justify-content: center; background: rgba(14,15,17,0.88); border: 1px solid var(--line); border-top: 4px solid var(--accent); padding: 12px 16px; }
+.photo-group { display: flex; gap: 6px; align-items: center; }
+.photo-group span { font-size: 14px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin-right: 4px; }
+.photo-group button { background: var(--ink-2); border: 1px solid var(--line); padding: 7px 12px 6px; font-size: 16px; font-weight: 700; text-transform: uppercase; }
+.photo-group button.on { background: var(--paper); color: var(--ink); }
+.photo-group button.primary { background: var(--accent); color: var(--ink); border-color: var(--accent); }
+.photo-group input[type=range] { width: 130px; padding: 0; accent-color: var(--accent); }
+.photo-help { font-size: 15px; color: var(--paper); text-shadow: 0 1px 6px rgba(0,0,0,0.7); text-transform: uppercase; letter-spacing: 0.04em; }
+.panel.settings h3 { margin-top: 18px; }
+.swatches button.locked { opacity: 0.32; cursor: not-allowed; position: relative; }
+.swatches button.locked::after { content: attr(data-lv); position: absolute; inset: auto -6px -14px; font-size: 10px; font-weight: 800; color: var(--muted); text-align: center; }
+.swatches { row-gap: 16px; }
+.menu-list button:focus-visible, .btn:focus-visible, .swatches button:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
+.menu-foot .lvl { color: var(--cyan); margin-right: 14px; }

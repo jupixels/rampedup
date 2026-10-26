@@ -2,6 +2,7 @@
 // continuous procedural layers the library doesn't cover (tyre roll, wind,
 // freewheel ticking, grind scrape).
 import { clamp, store } from './util.js';
+import { Music } from './music.js';
 
 const SOUNDS = {
   land:      { src: ['impacts/soft_medium_01.mp3', 'impacts/soft_medium_02.mp3', 'impacts/soft_medium_03.mp3'], volume: 0.36 },
@@ -31,6 +32,9 @@ export class Audio {
     this.ready = false;
     this.volume = store('volume') ?? 0.8;
     this.muted = store('muted') ?? false;
+    this.musicVol = store('musicVol') ?? 0.6;
+    this.sfxVol = store('sfxVol') ?? 1;
+    this.music = new Music(this.sfx);
     this.apply();
   }
 
@@ -42,7 +46,12 @@ export class Audio {
 
   apply() {
     this.sfx.setVolume('master', this.muted ? 0 : this.volume);
+    this.sfx.setVolume('music', this.musicVol * 0.6);
+    this.sfx.setVolume('sfx', this.sfxVol);
+    this.sfx.setVolume('ui', this.sfxVol);
   }
+  setMusicVolume(v) { this.musicVol = v; store('musicVol', v); this.apply(); if (v > 0) this.music.start(); }
+  setSfxVolume(v) { this.sfxVol = v; store('sfxVol', v); this.apply(); }
   setVolume(v) { this.volume = v; store('volume', v); this.apply(); }
   toggleMute() { this.muted = !this.muted; store('muted', this.muted); this.apply(); return this.muted; }
 

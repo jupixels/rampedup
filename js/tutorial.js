@@ -130,6 +130,7 @@ export class Tutorial {
     this.active = false;
     this.el.classList.add('hidden');
     if (finished || (this.i >= this.steps.length - 1)) {
+      if (!store('tutorialDone')) this.game.progress?.add(500, 'tutorial');
       store('tutorialDone', true);
       this.game.ui.markTutorialDone?.();
       this.game.ui.toast('Tutorial complete. Go ride!');

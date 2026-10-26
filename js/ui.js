@@ -3,6 +3,7 @@ import { ZONES, FAST_TRAVEL, WORLD, LAKE } from './layout.js';
 import { CHALLENGES } from './courses.js';
 import { formatTime, clamp, store } from './util.js';
 import { TRICK_LIST } from './input.js';
+import { UNLOCKS, BASE, xpForLevel } from './progress.js';
 
 const $ = (s, el = document) => el.querySelector(s);
 const PALETTES = {
@@ -37,9 +38,30 @@ export class UI {
   }
 
   // ---------- loading ----------
+  startTips() {
+    const tips = [
+      ['Pop', 'Let go of Space right as you leave a lip to jump higher.'],
+      ['Vert', 'On quarter pipes you turn around in the air on your own. Spin input adds to it.'],
+      ['Combos', 'Land an air straight into a manual to keep the combo going.'],
+      ['Perfect', 'Land smoothly on a downslope for a Perfect Landing bonus and a little extra speed.'],
+      ['Grinds', 'Hold W, S or A/D as you lock onto a rail to pick Icepick, Feeble or Smith.'],
+      ['Ghosts', 'Your best run on every course comes back as a ghost to race.'],
+      ['Sprockets', 'Some golden sprockets float over gaps. You have to jump for them.'],
+      ['Photo mode', 'Press P to freeze the moment and line up the perfect shot.'],
+      ['Lift', 'Ride up to the glowing pad at Big Air and press E to reach the top of the mega ramp.'],
+      ['Bails', 'Press Space or R to get back on straight after a crash.'],
+      ['Friends', 'Host a room and send the invite link. The host can start races.'],
+    ];
+    const el = document.getElementById('load-tip');
+    let i = Math.floor(Math.random() * tips.length);
+    const show = () => { const [h, t] = tips[i++ % tips.length]; el.innerHTML = `<b>${h}</b>${t}`; };
+    show();
+    this._tipT = setInterval(show, 3200);
+  }
+
   loading(text, p) { if (location.search.includes('debug')) console.log('[load]', text, Math.round(performance.now())); this.el.loadText.textContent = text; this.el.loadFill.style.width = `${Math.round(p * 100)}%`; }
   error(msg) { this.el.loadError.innerHTML = msg; this.el.loadError.classList.remove('hidden'); this.el.loadText.textContent = 'Something went wrong'; }
-  hideLoading() { this.el.loading.classList.add('hidden'); }
+  hideLoading() { this.el.loading.classList.add('hidden'); clearInterval(this._tipT); }
 
   // ---------- menus ----------
   bindMenus() {
@@ -70,6 +92,16 @@ export class UI {
       case 'openmap': this.openMap(); break;
       case 'closemap': this.closeMap(); break;
       case 'quitcourse': g.courses.cancel(); g.setPaused(false); break;
+      case 'photo': g.setPaused(false); g.photo.enter(); break;
+      case 'quitmenu': g.quitToMenu(); break;
+      case 'resetprogress': {
+        if (b.dataset.armed) {
+          ['xp', 'best', 'medals', 'challenges', 'sprockets', 'tutorialDone'].forEach((k) => { try { localStorage.removeItem('rampedup.' + k); } catch (e) {} });
+          Object.keys(localStorage).filter((k) => k.startsWith('rampedup.ghost.')).forEach((k) => localStorage.removeItem(k));
+          location.reload();
+        } else { b.dataset.armed = '1'; b.innerHTML = '<span>Click again to erase everything</span>'; }
+        break;
+      }
       case 'quick': this.mpDo(() => g.net.quickJoin(), 'Finding a session…'); break;
       case 'host': this.mpDo(() => g.net.host(), 'Opening a room…'); break;
       case 'join': {
@@ -183,21 +215,28 @@ export class UI {
   }
 
   renderCustomize() {
-    const p = this.panelEl, s = this.game.settings;
+    const p = this.panelEl, s = this.game.settings, prog = this.game.progress;
     const name = p.querySelector('[data-bind=name]');
     name.value = s.name;
     name.addEventListener('input', () => { s.name = name.value.trim() || 'Rider'; this.game.saveSettings(); });
     p.querySelectorAll('.swatch-group').forEach((grp) => {
       const part = grp.dataset.part;
       const box = grp.querySelector('.swatches');
-      for (const col of PALETTES[part]) {
+      const items = [...(PALETTES[part] || BASE[part] || []).map((v) => ({ value: v })), ...UNLOCKS.filter((u) => u.part === part)];
+      for (const it of items) {
         const b = document.createElement('button');
-        b.style.background = col;
-        b.title = col;
-        if (s.colors[part] === col) b.classList.add('sel');
+        b.style.background = it.finish === 'chrome' ? 'linear-gradient(135deg,#fff,#8d939b 45%,#f4f4f4 55%,#6b7178)' : it.finish === 'gold' || it.finish === 'metal' && it.value === '#d4af37' ? 'linear-gradient(135deg,#fff3b0,#b8862b 50%,#ffe28a)' : it.finish === 'oilslick' ? 'conic-gradient(#7b5cff,#3fd4ff,#57e08a,#ffd21f,#ff5fa2,#7b5cff)' : it.value;
+        const locked = it.level && it.level > prog.level;
+        b.title = it.label ? `${it.label}${locked ? ` · unlocks at level ${it.level}` : ''}` : it.value;
+        b.setAttribute('aria-label', b.title);
+        if (locked) { b.classList.add('locked'); b.dataset.lv = `LV ${it.level}`; }
+        const cur = s.colors[part] === it.value && (s.colors[part + 'Finish'] || null) === (it.finish || null);
+        if (cur) b.classList.add('sel');
         b.addEventListener('click', (e) => {
           e.stopPropagation();
-          s.colors[part] = col;
+          if (locked) { this.toast(`${it.label} unlocks at level ${it.level}`); this.game.audio.play('fail'); return; }
+          s.colors[part] = it.value;
+          s.colors[part + 'Finish'] = it.finish || null;
           box.querySelectorAll('button').forEach((x) => x.classList.toggle('sel', x === b));
           this.game.player.model.setColors(s.colors);
           this.game.saveSettings();
@@ -206,6 +245,8 @@ export class UI {
         box.appendChild(b);
       }
     });
+    const next = UNLOCKS.find((u) => u.level > prog.level);
+    p.querySelector('[data-bind=unlockhint]').textContent = next ? `Level ${prog.level}. Next unlock at level ${next.level}: ${next.label}. Earn XP by banking combos, finishing courses and finding sprockets.` : `Level ${prog.level}. Everything is unlocked.`;
     this.game.focusRider = true;
   }
 
@@ -229,43 +270,79 @@ export class UI {
 
   renderSettings() {
     const p = this.panelEl, s = this.game.settings, g = this.game;
-    const q = p.querySelector('[data-bind=quality]');
-    q.value = s.quality;
-    q.addEventListener('change', () => { s.quality = q.value; g.saveSettings(); if (confirm('Reload now to apply the new quality?')) location.reload(); });
-    const t = p.querySelector('[data-bind=time]');
-    t.value = s.time;
-    t.addEventListener('change', () => { s.time = t.value; g.saveSettings(); g.env.setTime(s.time); });
-    const v = p.querySelector('[data-bind=volume]');
-    v.value = g.audio.volume;
-    v.addEventListener('input', () => g.audio.setVolume(+v.value));
-    const m = p.querySelector('[data-bind=mute]');
-    m.checked = g.audio.muted;
-    m.addEventListener('change', () => { if (m.checked !== g.audio.muted) g.audio.toggleMute(); });
-    const f = p.querySelector('[data-bind=fps]');
-    f.checked = !!s.fps;
-    f.addEventListener('change', () => { s.fps = f.checked; g.saveSettings(); this.applyPrefs(); });
-    const h = p.querySelector('[data-bind=hints]');
-    h.checked = s.hints !== false;
-    h.addEventListener('change', () => { s.hints = h.checked; g.saveSettings(); this.applyPrefs(); });
+    const bind = (key, get, set, ev = 'input') => {
+      const el = p.querySelector(`[data-bind=${key}]`);
+      if (el.type === 'checkbox') el.checked = !!get(); else el.value = get();
+      el.addEventListener(ev, () => { set(el.type === 'checkbox' ? el.checked : el.type === 'range' ? +el.value : el.value); g.saveSettings(); g.applySettings(); this.applyPrefs(); });
+    };
+    bind('quality', () => s.quality, (v) => { s.quality = v; g.saveSettings(); this.toast('Reload the page to apply the new quality'); }, 'change');
+    bind('time', () => s.time, (v) => { s.time = v; g.env.setTime(v); }, 'change');
+    bind('volume', () => g.audio.volume, (v) => g.audio.setVolume(v));
+    bind('music', () => g.audio.musicVol, (v) => g.audio.setMusicVolume(v));
+    bind('sfx', () => g.audio.sfxVol, (v) => g.audio.setSfxVolume(v));
+    bind('mute', () => g.audio.muted, (v) => { if (v !== g.audio.muted) g.audio.toggleMute(); }, 'change');
+    bind('camdist', () => s.camDist, (v) => { s.camDist = v; });
+    bind('fov', () => s.fov, (v) => { s.fov = v; });
+    bind('sens', () => s.sens, (v) => { s.sens = v; });
+    bind('invert', () => s.invert, (v) => { s.invert = v; }, 'change');
+    bind('reduce', () => s.reduceMotion, (v) => { s.reduceMotion = v; }, 'change');
+    bind('mph', () => s.mph, (v) => { s.mph = v; }, 'change');
+    bind('minimap', () => s.minimap !== false, (v) => { s.minimap = v; }, 'change');
+    bind('hints', () => s.hints !== false, (v) => { s.hints = v; }, 'change');
+    bind('fps', () => s.fps, (v) => { s.fps = v; }, 'change');
   }
 
   applyPrefs() {
     const s = this.game.settings || {};
     this.el.fps.classList.toggle('hidden', !s.fps);
     this.el.hints.classList.toggle('hidden', s.hints === false || this.game.touch);
+    this.el.minimap.classList.toggle('hidden', s.minimap === false);
+    document.querySelector('.speed small').textContent = s.mph ? 'mph' : 'km/h';
   }
 
   showMenu() {
     this.el.menu.classList.remove('hidden');
     this.el.hud.classList.add('hidden');
     const C = this.game.courses;
-    $('#menu-stats').textContent = `Sprockets ${C.found.size}/${C.sprockets.length} · Challenges ${C.done.size}/${CHALLENGES.length}`;
+    $('#menu-stats').innerHTML = `<span class="lvl">Level ${this.game.progress.level}</span>` + `Sprockets ${C.found.size}/${C.sprockets.length} · Challenges ${C.done.size}/${CHALLENGES.length}`;
   }
   hideMenu() { this.el.menu.classList.add('hidden'); this.closePanels(); this.el.hud.classList.remove('hidden'); }
   showPause(on) {
     this.el.pause.classList.toggle('hidden', !on);
     $('#btn-quitcourse').classList.toggle('hidden', !this.game.courses.run);
     if (!on) { this.closePanels(); this.game.focusRider = false; }
+  }
+
+  // ---------- gamepad menu navigation ----------
+  menuNav(nav) {
+    if (!nav) return;
+    const g = this.game;
+    const screens = [this.el.map, document.getElementById('photo'), this.el.pause, this.el.menu, this.el.result];
+    const scr = screens.find((x) => x && !x.classList.contains('hidden') && x.offsetParent !== null);
+    if (!scr) return;
+    const items = [...scr.querySelectorAll('button, input, select')].filter((x) => x.offsetParent !== null && !x.disabled);
+    if (!items.length) return;
+    let i = items.indexOf(document.activeElement);
+    const focus = (j) => { const el = items[(j + items.length) % items.length]; el.focus({ preventScroll: false }); el.scrollIntoView?.({ block: 'nearest' }); this.audio?.(); };
+    const cur = items[i];
+    if (nav.down) focus(i < 0 ? 0 : i + 1);
+    if (nav.up) focus(i < 0 ? 0 : i - 1);
+    if ((nav.left || nav.right) && cur && cur.type === 'range') {
+      const st = +cur.step || 0.05;
+      cur.value = +cur.value + (nav.right ? st : -st);
+      cur.dispatchEvent(new Event('input', { bubbles: true }));
+    } else if ((nav.left || nav.right) && cur && cur.tagName === 'SELECT') {
+      cur.selectedIndex = Math.max(0, Math.min(cur.options.length - 1, cur.selectedIndex + (nav.right ? 1 : -1)));
+      cur.dispatchEvent(new Event('change', { bubbles: true }));
+    } else if (nav.right) focus(i + 1);
+    else if (nav.left) focus(i - 1);
+    if (nav.ok && cur) { if (cur.type === 'checkbox') { cur.checked = !cur.checked; cur.dispatchEvent(new Event('change', { bubbles: true })); } else cur.click(); }
+    if (nav.back) {
+      if (this.mapOpen) this.closeMap();
+      else if (g.photo?.active) g.photo.exit();
+      else if (this.panelOpen) this.closePanels();
+      else if (g.playing && g.paused) g.setPaused(false);
+    }
   }
 
   // ---------- map ----------
@@ -389,7 +466,18 @@ export class UI {
     const cache = this._dom || (this._dom = new Map());
     const set = (node, v, html = false) => { if (cache.get(node) === v) return; cache.set(node, v); if (html) node.innerHTML = v; else node.textContent = v; };
     const cls = (node, c, on) => { const k = c + '|'; const key = node; const prev = cache.get(k + (node.id || '')); if (prev === on) return; cache.set(k + (node.id || ''), on); node.classList.toggle(c, on); };
-    set(el.speed, String(Math.round(p.speed * 3.6)));
+    set(el.speed, String(Math.round(p.speed * (g.settings.mph ? 2.237 : 3.6))));
+    if (this.frame % 10 === 0) {
+      set(this.lvlEl || (this.lvlEl = document.getElementById('hud-level')), `Lv ${g.progress.level}`);
+      const w = `${Math.round(g.progress.frac() * 100)}%`;
+      const xb = this.xpBar || (this.xpBar = document.getElementById('hud-xp'));
+      if (xb.style.width !== w) xb.style.width = w;
+    }
+    // combo timer: how long until the combo banks
+    const ct = this.comboTimer || (this.comboTimer = document.getElementById('hud-combo-timer'));
+    const cfrac = g.tricks.combo && p.mode === 'ground' && !p.manual ? Math.max(0, 1 - g.tricks.idle / 0.75) : 1;
+    const ctv = cfrac.toFixed(2);
+    if (cache.get('ct') !== ctv) { cache.set('ct', ctv); ct.style.transform = `scaleX(${ctv})`; }
     set(el.score, g.tricks.total.toLocaleString());
     if (this.frame % 15 === 0) set(el.zone, g.zoneName());
     // combo
@@ -435,7 +523,7 @@ export class UI {
     const pr = g.promptText();
     cls(el.prompt, 'hidden', !pr);
     if (pr) set(el.prompt, pr, true);
-    if (this.frame % 3 === 0 && !this.game.touchSmall) this.drawMinimap();
+    if (this.frame % 3 === 0 && g.settings.minimap !== false) this.drawMinimap();
     // scoreboard
     const showSB = g.input.state.scoreHeld;
     cls(el.scoreboard, 'hidden', !showSB);
@@ -474,6 +562,25 @@ export class UI {
     const b = this.el.big;
     b.textContent = t;
     b.classList.remove('show'); void b.offsetWidth; b.classList.add('show');
+  }
+
+  xpGain(amount, reason) {
+    const el = document.getElementById('hud-xpgain');
+    this._xpAcc = (this._xpShow ? this._xpAcc : 0) + amount;
+    this._xpShow = true;
+    el.textContent = `+${this._xpAcc.toLocaleString()} XP${reason ? ' · ' + reason : ''}`;
+    el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
+    clearTimeout(this._xpT);
+    this._xpT = setTimeout(() => { this._xpShow = false; }, 1500);
+  }
+
+  levelUp(level, unlocked) {
+    const el = document.getElementById('levelup');
+    el.innerHTML = `<p>Level up</p><h3>Level ${level}</h3>${unlocked.length ? `<ul>${unlocked.map((u) => `<li>${esc(u.label)}</li>`).join('')}</ul><p class="muted small">Equip in Customize</p>` : ''}`;
+    el.classList.remove('hidden');
+    el.style.animation = 'none'; void el.offsetWidth; el.style.animation = '';
+    clearTimeout(this._lvT);
+    this._lvT = setTimeout(() => el.classList.add('hidden'), 4300);
   }
 
   bailCaption(title, sub = '') {

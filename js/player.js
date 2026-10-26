@@ -149,6 +149,7 @@ export class Player {
       const b = 8 * input.brake * dt;
       vf = Math.abs(vf) < b ? 0 : vf - Math.sign(vf) * b;
     }
+    this.skidding = (input.brake > 0.5 && Math.abs(vf) > 2.5) || Math.abs(vl) > 1.6;
     // gravity along the surface
     const gf = -G * f.y, gl = -G * lat.y;
     vf += gf * dt; vl += gl * dt;
@@ -406,10 +407,12 @@ export class Player {
       this.doBail(fails[0], vn);
       return;
     }
-    // clean landing
+    // clean landing. A "perfect" one (smooth onto a downslope, rolling straight) keeps a bit of extra speed
     this.pos.y = g.h;
-    const loss = clamp(1 - Math.max(0, vn - 5) * 0.035, 0.6, 1);
+    const perfect = A.t > 0.45 && vn < 3.2 && tsp > 4 && n.y < 0.985 && !fakie;
+    const loss = perfect ? 1.06 : clamp(1 - Math.max(0, vn - 5) * 0.035, 0.6, 1);
     this.vel.copy(vt).multiplyScalar(loss);
+    if (perfect) { this.game.tricks.addTrick('Perfect Landing', 150, false); this.emit('perfect'); }
     if (fakie) {
       this.heading = wrapAngle(this.heading + Math.PI);
     }
@@ -421,7 +424,7 @@ export class Player {
     const flips = Math.round(A.flip / TAU);
     if (this.anim) A.tricks.push({ type: this.anim.type, hold: this.anim.holdTime }); // finished on touchdown
     this.game.tricks.land(A, { flips, fakie, airtime: A.t, height: A.maxY - Math.min(A.startY, this.pos.y), vn });
-    this.emit('land', { vn, big: A.t > 0.9 });
+    this.emit('land', { vn, big: A.t > 0.9, airtime: A.t, pos: this.pos.clone(), surface: g.surface });
     this.anim = null; this.animQueue.length = 0;
     this.air = null;
     // land straight into a manual if held
@@ -550,7 +553,7 @@ export class Player {
     this.ragdoll.start(this.model, this.vel, { splash });
     this.bail = { t: 0, reason, splash, riderPos: this.ragdoll.centre().clone(), lastThud: 0, peak: this.pos.y, dist: 0, start: this.pos.clone() };
     this.game.tricks.bail(reason);
-    this.emit('bail', { reason, speed: sp, splash, impact });
+    this.emit('bail', { reason, speed: sp, splash, impact, pos: this.pos.clone(), surface: this.ground.surface });
   }
 
   updateBail(dt, input) {
@@ -561,7 +564,7 @@ export class Player {
     B.peak = Math.max(B.peak, B.riderPos.y);
     B.dist = Math.max(B.dist, Math.hypot(B.riderPos.x - B.start.x, B.riderPos.z - B.start.z));
     this.pos.copy(B.riderPos);
-    if (hit > 3.5 && B.t - B.lastThud > 0.12) { B.lastThud = B.t; this.emit('thud', { strength: hit }); }
+    if (hit > 3.5 && B.t - B.lastThud > 0.12) { B.lastThud = B.t; this.emit('thud', { strength: hit, pos: B.riderPos.clone() }); }
     const settled = B.t > 3.2;
     if (settled || (B.t > 0.7 && (input.resetPressed || input.hopPressed))) {
       this.ragdoll.active = false;

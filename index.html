@@ -27,6 +27,7 @@
     <div class="logo"><span class="logo-ramped">RAMPED</span><span class="logo-up">UP</span></div>
     <div class="load-bar"><i id="load-fill"></i></div>
     <div id="load-text">Pumping tyres…</div>
+    <div id="load-tip"></div>
     <div id="load-error" class="hidden"></div>
   </section>
 
@@ -97,33 +98,51 @@
       <div class="swatch-group" data-part="helmet"><span>Helmet</span><div class="swatches"></div></div>
       <div class="swatch-group" data-part="shirt"><span>Jersey</span><div class="swatches"></div></div>
       <div class="swatch-group" data-part="pants"><span>Pants</span><div class="swatches"></div></div>
+      <div class="swatch-group" data-part="rims"><span>Rims</span><div class="swatches"></div></div>
+      <div class="swatch-group" data-part="tires"><span>Tyres</span><div class="swatches"></div></div>
+      <div class="swatch-group" data-part="bars"><span>Bars</span><div class="swatches"></div></div>
+      <p class="muted small" data-bind="unlockhint"></p>
     </div>
   </template>
 
   <template id="tpl-settings">
-    <div class="panel">
+    <div class="panel settings">
       <h2>Settings</h2>
-      <label class="field">Graphics quality
-        <select data-bind="quality">
-          <option value="low">Low — older laptops & phones</option>
+      <h3>Graphics</h3>
+      <label class="field">Quality
+        <select data-bind="quality" id="set-quality">
+          <option value="low">Low: older laptops and phones</option>
           <option value="medium">Medium</option>
           <option value="high">High</option>
-          <option value="ultra">Ultra — big GPUs</option>
+          <option value="ultra">Ultra: big GPUs</option>
         </select>
       </label>
       <label class="field">Time of day
-        <select data-bind="time">
+        <select data-bind="time" id="set-time">
           <option value="golden">Golden hour</option>
           <option value="midday">Midday</option>
           <option value="sunset">Sunset</option>
           <option value="overcast">Overcast</option>
         </select>
       </label>
-      <label class="field">Volume <input type="range" min="0" max="1" step="0.05" data-bind="volume"></label>
-      <label class="check"><input type="checkbox" data-bind="mute"> Mute</label>
-      <label class="check"><input type="checkbox" data-bind="fps"> Show FPS</label>
-      <label class="check"><input type="checkbox" data-bind="hints"> Show control hints</label>
-      <p class="muted small">Quality changes apply after reload.</p>
+      <h3>Audio</h3>
+      <label class="field">Master volume <input type="range" min="0" max="1" step="0.05" data-bind="volume" id="set-volume"></label>
+      <label class="field">Music <input type="range" min="0" max="1" step="0.05" data-bind="music" id="set-music"></label>
+      <label class="field">Sound effects <input type="range" min="0" max="1" step="0.05" data-bind="sfx" id="set-sfx"></label>
+      <label class="check"><input type="checkbox" data-bind="mute" id="set-mute"> Mute everything</label>
+      <h3>Camera &amp; controls</h3>
+      <label class="field">Camera distance <input type="range" min="0.7" max="1.6" step="0.05" data-bind="camdist" id="set-camdist"></label>
+      <label class="field">Field of view <input type="range" min="50" max="80" step="1" data-bind="fov" id="set-fov"></label>
+      <label class="field">Mouse look sensitivity <input type="range" min="0.3" max="2.5" step="0.1" data-bind="sens" id="set-sens"></label>
+      <label class="check"><input type="checkbox" data-bind="invert" id="set-invert"> Invert camera up/down</label>
+      <h3>Display</h3>
+      <label class="check"><input type="checkbox" data-bind="reduce" id="set-reduce"> Reduce motion (no shake, slow-mo or dips)</label>
+      <label class="check"><input type="checkbox" data-bind="mph" id="set-mph"> Show speed in mph</label>
+      <label class="check"><input type="checkbox" data-bind="minimap" id="set-minimap"> Show minimap</label>
+      <label class="check"><input type="checkbox" data-bind="hints" id="set-hints"> Show control hints</label>
+      <label class="check"><input type="checkbox" data-bind="fps" id="set-fps"> Show FPS</label>
+      <p class="muted small">Quality changes apply after a reload.</p>
+      <div class="row"><button class="btn small ghost" data-action="resetprogress"><span>Reset all progress</span></button></div>
     </div>
   </template>
 
@@ -146,7 +165,7 @@
         <div><kbd>L</kbd> superman · <kbd>U</kbd> no hander · <kbd>I</kbd> can can</div><div>B · LB · RB</div>
         <div><kbd>O</kbd> table top · <kbd>H</kbd> no footer</div><div>D-pad ↓ ↑</div>
         <div><kbd>E</kbd> start course / take lift · <kbd>R</kbd> reset</div><div>D-pad ← → · Back</div>
-        <div><kbd>C</kbd> camera · <kbd>M</kbd> map · <kbd>T</kbd> chat · <kbd>Tab</kbd> riders</div><div>Stick click</div>
+        <div><kbd>C</kbd> camera · <kbd>M</kbd> map · <kbd>P</kbd> photo mode · <kbd>T</kbd> chat · <kbd>Tab</kbd> riders</div><div>Stick click</div>
         <div>Drag the mouse to look around</div><div>Right stick</div>
       </div>
       <p class="small muted">On touch screens: the left stick steers and pedals (push up), HOP is the big button, and AUTO pedals for you.</p>
@@ -197,6 +216,8 @@
         <li>Beat the times or scores for <b>bronze, silver and gold</b>. Your best run comes back as a blue <b>ghost</b> to race.</li>
         <li><b>Golden sprockets</b> are hidden all over, some in mid-air over gaps. Gold dots on the map show the ones you haven't found.</li>
         <li><b>Challenges</b> are listed under Courses. Progress saves in this browser.</li>
+        <li><b>XP and levels</b>: banked combos, courses, sprockets and challenges all earn XP. New levels unlock paint jobs, chrome and gold parts, rims, tyres and bars in Customize.</li>
+        <li><b>Photo mode</b> (P) freezes the moment so you can fly the camera around, change the light and save a picture.</li>
       </ul>
 
       <h3 id="g-mp">Multiplayer</h3>
@@ -214,6 +235,7 @@
       <div class="zone" id="hud-zone">The Yard</div>
       <div class="speed"><b id="hud-speed">0</b><small>km/h</small></div>
       <div class="score">Score <b id="hud-score">0</b></div>
+      <div class="level"><span id="hud-level">Lv 1</span><i><b id="hud-xp"></b></i></div>
     </div>
     <div class="hud-tc" id="hud-course">
       <div class="course-name" id="hud-cname"></div>
@@ -224,7 +246,10 @@
     <div class="combo" id="hud-combo">
       <div class="combo-text" id="hud-combo-text"></div>
       <div class="combo-score" id="hud-combo-score"></div>
+      <div class="combo-timer"><i id="hud-combo-timer"></i></div>
     </div>
+    <div class="levelup hidden" id="levelup"></div>
+    <div class="xpgain" id="hud-xpgain"></div>
     <div class="bank" id="hud-bank"></div>
     <div class="balance hidden" id="hud-balance"><i></i><span></span></div>
     <div class="bigtext" id="hud-big"></div>
@@ -235,7 +260,7 @@
     <div class="toasts" id="toasts"></div>
     <canvas class="minimap" id="minimap" width="200" height="200"></canvas>
     <div class="hints" id="hud-hints">
-      <span><kbd>W</kbd> pedal</span><span><kbd>Space</kbd> hop</span><span><kbd>J K L U I O</kbd> tricks</span><span><kbd>E</kbd> course</span><span><kbd>M</kbd> map</span><span><kbd>Esc</kbd> menu</span>
+      <span><kbd>W</kbd> pedal</span><span><kbd>Space</kbd> hop</span><span><kbd>J K L U I O</kbd> tricks</span><span><kbd>E</kbd> course</span><span><kbd>M</kbd> map</span><span><kbd>P</kbd> photo</span><span><kbd>Esc</kbd> menu</span>
     </div>
     <div class="fps hidden" id="hud-fps"></div>
     <div class="net-badge hidden" id="net-badge"></div>
@@ -273,13 +298,28 @@
         <button data-panel="customize">Customize</button>
         <button data-panel="settings">Settings</button>
         <button data-panel="controls">Guide</button>
+        <button data-action="photo">Photo mode</button>
         <button data-action="quitcourse" class="hidden" id="btn-quitcourse">Quit course</button>
+        <button data-action="quitmenu">Quit to title</button>
       </nav>
     </div>
     <div class="menu-right" id="pause-panel-host"></div>
   </section>
 
   <!-- Touch controls -->
+  <!-- Photo mode -->
+  <section id="photo" class="hidden">
+    <div class="photo-bar">
+      <div class="photo-group"><span>Light</span>
+        <button data-time="golden">Golden</button><button data-time="midday">Midday</button><button data-time="sunset">Sunset</button><button data-time="overcast">Overcast</button>
+      </div>
+      <label class="photo-group"><span>Lens</span><input type="range" min="20" max="100" step="1" data-ph="fov" id="photo-fov"></label>
+      <div class="photo-group"><button data-ph="rider">Hide rider</button></div>
+      <div class="photo-group"><button data-ph="save" class="primary">Save photo</button><button data-ph="exit">Exit</button></div>
+    </div>
+    <div class="photo-help">Drag to orbit · scroll to zoom · <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move · <kbd>Q</kbd><kbd>E</kbd> down/up · <kbd>Shift</kbd> faster · <kbd>P</kbd> or <kbd>Esc</kbd> exit</div>
+  </section>
+
   <section id="touch" class="hidden">
     <div class="stick" id="stick"><i></i></div>
     <div class="tbtns">

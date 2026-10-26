@@ -363,6 +363,8 @@ export class Courses {
         g.audio.play('pickup');
         g.ui.toast(`Golden Sprocket ${this.found.size}/${this.sprockets.length}`, 'gold');
         g.tricks.addTrick('Sprocket', 250, false);
+        g.progress?.add(150, 'sprocket');
+        g.fx?.confetti(new THREE.Vector3(s.x, s.y - 1.6, s.z), 40);
         this.checkChallenges({ type: 'sprocket' });
       }
     }
@@ -463,6 +465,8 @@ export class Courses {
     if (medal > 0) setTimeout(() => g.audio.play('finish'), 400);
     this.refreshLabel(c);
     g.ui.courseEnd({ course: c, result, medal, isBest, race: r.opts.race });
+    if (isBest || medal >= 3) g.fx?.confetti(g.player.pos, 140);
+    g.progress?.add(150 + medal * 250 + (isBest ? 150 : 0), c.name);
     if (r.opts.race) g.net.sendFinish(c.id, result);
     this.checkChallenges({ type: 'courseDone', medal, course: c });
   }
@@ -477,6 +481,7 @@ export class Courses {
         this.done.add(ch.id);
         store('challenges', [...this.done]);
         g.ui.toast(`Challenge complete: ${ch.name}`, 'challenge');
+        g.progress?.add(400, 'challenge');
         g.audio.play('record');
       }
     }

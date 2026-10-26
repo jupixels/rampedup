@@ -17,6 +17,9 @@ import { Audio } from './audio.js';
 import { Net } from './network.js';
 import { UI } from './ui.js';
 import { Tutorial } from './tutorial.js';
+import { FX } from './fx.js';
+import { Progress } from './progress.js';
+import { PhotoMode } from './photo.js';
 import { ZONES, SPAWN } from './layout.js';
 import { store, clamp } from './util.js';
 
@@ -78,6 +81,7 @@ class Game {
       name: 'Rider' + Math.floor(Math.random() * 900 + 100),
       colors: { frame: '#ff5a1f', helmet: '#f2f2f2', shirt: '#1d2b3a', pants: '#2a2a2a' },
       quality: null, time: 'golden', fps: false, hints: true, cam: 'chase',
+      camDist: 1, fov: 60, sens: 1, invert: false, reduceMotion: false, mph: false, minimap: true,
     }, store('settings') || {});
     this.touch = matchMedia('(pointer: coarse)').matches && !matchMedia('(pointer: fine)').matches;
     if (!this.settings.quality) this.settings.quality = this.touch ? 'low' : 'medium';
@@ -90,9 +94,35 @@ class Game {
 
   saveSettings() { store('settings', this.settings); }
 
+  // push settings into the systems that use them
+  applySettings() {
+    const s = this.settings;
+    if (this.cam) { this.cam.distScale = s.camDist || 1; this.cam.baseFov = s.fov || 60; this.cam.reduceMotion = !!s.reduceMotion; }
+    if (this.input) { this.input.sens = s.sens || 1; this.input.invert = !!s.invert; }
+  }
+
+  quitToMenu() {
+    if (this.courses.run) this.courses.cancel(true);
+    if (this.tutorial.active) this.tutorial.stop();
+    if (this.photo.active) this.photo.exit();
+    this.paused = false;
+    this.ui.showPause(false);
+    this.playing = false;
+    this.ui.showTouch(false);
+    this.ui.showMenu();
+  }
+
+  onLevelUp(level, unlocked) {
+    this.ui.levelUp(level, unlocked);
+    this.audio.play('record');
+    setTimeout(() => this.audio.play('bigCombo'), 350);
+    this.fx.confetti(this.player.pos, 160);
+  }
+
   async init() {
     const canvas = document.getElementById('game');
     this.ui = new UI(this);
+    this.ui.startTips();
     let renderer;
     try {
       renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', stencil: false });
@@ -133,6 +163,14 @@ class Game {
     dbg('courses');
     this.net = new Net(this);
     this.tutorial = new Tutorial(this);
+    this.fx = new FX(this.scene);
+    this.fx.setScale(window.innerHeight * Math.min(window.devicePixelRatio || 1, this.q.pr));
+    this.progress = new Progress(this);
+    this.photo = new PhotoMode(this);
+    this.applySettings();
+    // music starts with the first click or key press (browsers block audio before that)
+    const startMusic = () => { if (this.audio.musicVol > 0) this.audio.music.start(); window.removeEventListener('pointerdown', startMusic); window.removeEventListener('keydown', startMusic); };
+    window.addEventListener('pointerdown', startMusic); window.addEventListener('keydown', startMusic);
     if (store('tutorialDone')) this.ui.markTutorialDone();
     this.setupComposer();
     dbg('composer');
@@ -183,6 +221,7 @@ class Game {
     window.addEventListener('resize', () => {
       const w = window.innerWidth, h = window.innerHeight;
       this.renderer.setSize(w, h);
+      this.fx?.setScale(h * this.renderer.getPixelRatio());
       this.composer.setPixelRatio(this.renderer.getPixelRatio());
       this.composer.setSize(w, h);
       this.camera.aspect = w / h;
@@ -264,6 +303,7 @@ class Game {
     }
     if (e.type === 'bank') {
       this.ui.bankPop(`+${e.score.toLocaleString()}`);
+      this.progress.add(Math.max(5, e.score / 8), e.mult > 1 ? `${e.mult}x combo` : '');
       if (e.score >= 8000) this.audio.play('bigCombo');
       if (e.score >= 10000 && this.net.online) this.net.send({ t: 'feed', text: `landed a ${e.score.toLocaleString()} pt combo` });
       if (this.net.online) this.net.send({ t: 'score', total: this.tricks.total });
@@ -280,11 +320,25 @@ class Game {
         case 'land':
           this.audio.play(ev.vn > 7 ? 'landHard' : 'land', { volume: clamp(0.4 + ev.vn / 10, 0.4, 1.2) });
           this.cam.addShake(clamp((ev.vn - 4) / 10, 0, 0.7));
+          this.cam.addDip(clamp(ev.vn / 9, 0.1, 1.1));
+          if (ev.pos) this.fx.dust(ev.pos, ev.surface, 6 + ev.vn * 3, 0.6 + ev.vn * 0.12, p.vel);
+          break;
+        case 'perfect':
+          this.audio.play('trick', { volume: 0.6, rate: 1.25 });
+          this.ui.feed('Perfect landing  +150');
+          break;
+        case 'takeoff':
+          if (['dirt', 'sand'].includes(p.ground.surface)) this.fx.dust(p.pos, p.ground.surface, 8, 0.6);
           break;
         case 'hop': this.audio.play('hop'); break;
-        case 'grindStart': this.audio.play('grind'); break;
+        case 'grindStart':
+          this.audio.play('grind');
+          if (p.grind) this.fx.sparks(p.pos.clone().add(new THREE.Vector3(0, 0.22, 0)), p.grind.rail.dir.clone().multiplyScalar(p.grind.sign), 14);
+          break;
         case 'bail': {
           this.audio.play('bail');
+          if (ev.splash) this.fx.splash(new THREE.Vector3(ev.pos.x, this.world.collision.waterLevel, ev.pos.z), 90);
+          else if (ev.pos) this.fx.dust(ev.pos, ev.surface, 20, 1.2);
           setTimeout(() => this.audio.play('bikeClang', { vary: 0.15 }), 140 + Math.random() * 120);
           this.cam.addShake(0.9);
           this.bails = (this.bails || 0) + 1;
@@ -296,6 +350,7 @@ class Game {
         case 'thud':
           this.audio.play(ev.strength > 7 ? 'landHard' : 'land', { volume: Math.min(1.2, 0.35 + ev.strength / 12), vary: 0.12, cooldown: 0.08 });
           this.cam.addShake(Math.min(0.5, ev.strength / 25));
+          if (ev.pos) this.fx.dust(ev.pos.clone().add(new THREE.Vector3(0, -0.3, 0)), p.g2.surface || 'concrete', 4 + ev.strength, 0.7);
           break;
         case 'respawn':
           if (ev.tumble > 0.5) {
@@ -337,11 +392,17 @@ class Game {
     if (!this.noAdapt) this.adaptResolution(rawDt);
     const input = this.input.poll();
     const p = this.player;
-    if (this.playing) {
+    if (!this.playing || this.paused || this.ui.mapOpen || this.photo.active) this.ui.menuNav(input.nav);
+    this.audio.music.setMuffled(!this.playing || this.paused);
+    if (this.playing && this.photo.active) {
+      if (input.pausePressed || input.photoPressed) this.photo.exit();
+      else this.photo.update(dt, input);
+    } else if (this.playing) {
       if (input.pausePressed) {
         if (this.ui.mapOpen) this.ui.closeMap();
         else this.setPaused(!this.paused);
       }
+      if (input.photoPressed && !this.paused && !this.ui.mapOpen) this.photo.enter();
       if (input.mapPressed) { if (this.ui.mapOpen) this.ui.closeMap(); else if (!this.paused) this.ui.openMap(); }
       if (!this.paused) {
         if (input.camPressed) { this.settings.cam = this.cam.cycle(); this.saveSettings(); this.ui.toast(`Camera: ${this.cam.mode}`); }
@@ -356,11 +417,12 @@ class Game {
           else if (this.nearLift()) { const d = this.world.anchors.megaDeck; this.teleport(d.x, d.z, 0, true); this.ui.toast('Drop in when ready. Commit!'); }
         }
         // slow motion for the first moments of a crash
-        const slow = p.mode === 'bail' && p.bail && p.bail.t < 0.55 ? 0.35 : 1;
+        const slow = p.mode === 'bail' && p.bail && p.bail.t < 0.55 && !this.settings.reduceMotion ? 0.35 : 1;
         p.update(dt * slow, input);
         this.tricks.update(dt, p);
         this.handlePlayerEvents();
         this.courses.update(dt);
+        this.fx.update(dt, p);
       }
       this.tutorial.update(dt);
       this.cam.update(dt, p, this.paused ? { orbitX: 0, orbitY: 0 } : input);

@@ -30,7 +30,12 @@ Share `?room=CODE` links to drop friends straight into your session.
 - **38 golden sprockets** hidden around the world and **18 challenges** to complete. Progress is saved in your browser.
 - **Multiplayer** — peer-to-peer over WebRTC (PeerJS), so it works on static hosting. Quick Join a public room or host a private one with a 5-letter code. See other riders live with name tags, chat, a scoreboard, a trick feed, and **host-started races** with synced countdowns and results. If the host leaves, someone else takes over the room.
 - **Looks** — physically based materials with procedurally generated textures, a physical sky with four times of day, soft sun shadows, image-based lighting, GPU grass that sways in the wind, thousands of instanced trees, water, clouds, bloom, optional ambient occlusion, and filmic tone mapping. Resolution scales automatically to keep the frame rate up.
-- **Controls** — keyboard, gamepad (standard layout) and touch.
+- **Feel** — dust kicked up on landings and dirt, sparks off grinds, splashes, skid marks, confetti, a landing camera dip, a camera that pulls back on big airs, and a Perfect Landing bonus for smooth landings.
+- **Progression** — XP from combos, courses, sprockets, challenges and the tutorial. Levels unlock paint jobs (raw steel, matte, chrome, gold, oil slick), rims, tyres, bars and helmets.
+- **Music** — a generated lo-fi soundtrack that never quite repeats, muffled while paused.
+- **Photo mode** (P) — freeze the moment, fly the camera, change the light and lens, hide the rider, and save a PNG.
+- **Settings** — separate music and effects volume, camera distance, field of view, mouse sensitivity, invert, reduce motion, mph, minimap toggle.
+- **Controls** — keyboard, gamepad (standard layout, including menu navigation) and touch.
 
 ## New to BMX games?
 
@@ -51,6 +56,7 @@ Pick **Tutorial** in the main menu for a 14-step guided run (pedal, hop, air, sp
 | Start course / take lift | E | D-pad ← / → |
 | Reset to last safe spot | R | Back |
 | Camera · Map · Chat · Riders | C · M · T · Tab | Stick click |
+| Photo mode | P | — |
 | Pause | Esc | Start |
 
 Grinding is automatic: land on a rail or ledge roughly lined up with it. Hold W/S/A/D as you lock on to pick the grind (Icepick, Feeble, Smith…), balance with A/D, and hop off with Space.
@@ -94,6 +100,10 @@ js/collision.js     terrain + triangle-grid ground queries, rail registry
 js/player.js        BMX physics, airs, grinds, manuals, bails
 js/ragdoll.js       Verlet ragdoll for the rider and bike when you crash
 js/tutorial.js      interactive tutorial
+js/fx.js            particles and skid marks
+js/progress.js      XP, levels and unlocks
+js/music.js         generative soundtrack
+js/photo.js         photo mode
 js/bikeModel.js     procedural bike + rider with IK and trick poses
 js/tricks.js        trick naming, scoring and combos
 js/courses.js       courses, ghosts, golden sprockets, challenges

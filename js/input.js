@@ -71,11 +71,13 @@ export class Input {
       s.mapPressed = this.pressed('KeyM');
       s.chatPressed = this.pressed('KeyT') || this.pressed('Enter');
       s.scoreHeld = k('Tab');
-      s.orbitX = this.mouse.dx * 0.005; s.orbitY = this.mouse.dy * 0.004;
+      const sens = this.sens || 1;
+      s.orbitX = this.mouse.dx * 0.005 * sens; s.orbitY = this.mouse.dy * 0.004 * sens * (this.invert ? -1 : 1);
       this.pollPad(s);
       this.pollTouch(s);
     }
-    s.pausePressed = this.pressed('Escape') || this.pressed('KeyP') || s.pausePressed;
+    s.pausePressed = this.pressed('Escape') || s.pausePressed;
+    s.photoPressed = this.pressed('KeyP');
     this.pressedKeys.clear();
     this.releasedKeys.clear();
     this.mouse.dx = this.mouse.dy = 0;
@@ -116,7 +118,19 @@ export class Input {
     s.camPressed = s.camPressed || pr(11) || pr(10);
     s.interactPressed = s.interactPressed || pr(14) || pr(15);
     s.mapPressed = s.mapPressed;
-    s.orbitX += rx * 0.05; s.orbitY += ry * 0.03;
+    s.orbitX += rx * 0.05; s.orbitY += ry * 0.03 * (this.invert ? -1 : 1);
+    // menu navigation edges (D-pad or stick with auto-repeat)
+    const now = performance.now();
+    const dirs = { up: b(12) || ly < -0.6, down: b(13) || ly > 0.6, left: b(14) || lx < -0.6, right: b(15) || lx > 0.6 };
+    this.navHeld = this.navHeld || {}; this.navRep = this.navRep || {};
+    const nav = {};
+    for (const [k, on] of Object.entries(dirs)) {
+      if (!on) { this.navHeld[k] = 0; continue; }
+      if (!this.navHeld[k]) { nav[k] = true; this.navHeld[k] = now; this.navRep[k] = false; }
+      else if (now - this.navHeld[k] > (this.navRep[k] ? 120 : 380)) { nav[k] = true; this.navHeld[k] = now; this.navRep[k] = true; }
+    }
+    nav.ok = pr(0); nav.back = pr(1);
+    s.nav = nav;
     this.prevPad = p.buttons.map((x) => x.pressed);
   }
 

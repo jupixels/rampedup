@@ -123,6 +123,7 @@ export class RiderBike {
     const mats = this.mats = {
       frame: new THREE.MeshPhysicalMaterial({ color: this.colors.frame, metalness: 0.45, roughness: 0.32, clearcoat: 1, clearcoatRoughness: 0.12 }),
       chrome: new THREE.MeshStandardMaterial({ color: 0xe8e8ea, metalness: 1, roughness: 0.12 }),
+      bar: new THREE.MeshStandardMaterial({ color: 0xd8d8dc, metalness: 1, roughness: 0.15 }),
       black: new THREE.MeshStandardMaterial({ color: 0x141416, metalness: 0.6, roughness: 0.38 }),
       tire: new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.92, normalMap: tread, normalScale: new THREE.Vector2(0.8, 0.8) }),
       rim: new THREE.MeshStandardMaterial({ color: 0x1b1c1f, metalness: 0.8, roughness: 0.3 }),
@@ -243,7 +244,7 @@ export class RiderBike {
     this.grips = [];
     const barPts = (s) => [clamp.clone().add(V(0, 0, 0)), clamp.clone().add(V(s * 0.12, 0, -0.005)), clamp.clone().add(V(s * 0.19, 0.06, -0.03)), clamp.clone().add(V(s * 0.25, 0.2, -0.06)), clamp.clone().add(V(s * 0.37, 0.235, -0.085))];
     for (const s of [-1, 1]) {
-      bars.add(curveTube(barPts(s), 0.011, mats.chrome, 24));
+      bars.add(curveTube(barPts(s), 0.011, mats.bar, 24));
       const end = barPts(s)[4];
       const grip = tube(end.clone().add(V(-s * 0.1, -0.004, 0.003)), end.clone().add(V(s * 0.02, 0.001, -0.002)), 0.016, mats.grip, 10);
       bars.add(grip);
@@ -252,7 +253,7 @@ export class RiderBike {
       bars.add(marker);
       this.grips.push(marker);
     }
-    bars.add(tube(clamp.clone().add(V(-0.17, 0.12, -0.04)), clamp.clone().add(V(0.17, 0.12, -0.04)), 0.008, mats.chrome)); // crossbar
+    bars.add(tube(clamp.clone().add(V(-0.17, 0.12, -0.04)), clamp.clone().add(V(0.17, 0.12, -0.04)), 0.008, mats.bar)); // crossbar
 
     // re-parent into pivots (preserve transforms)
     this.whipPivot.attach(rear);
@@ -318,14 +319,31 @@ export class RiderBike {
     this.pose = { crank: 0, steer: 0, barspin: 0, whip: 0, crouch: 0, shift: 0, superman: 0, nohander: 0, cancan: 0, nofooter: 0, tuck: 0, wheel: 0 };
     this._v = Array.from({ length: 12 }, () => new THREE.Vector3());
     this.nameTag = null;
+    this.setColors({});
   }
 
   setColors(c) {
     Object.assign(this.colors, c);
-    this.mats.frame.color.set(this.colors.frame);
-    this.mats.helmet.color.set(this.colors.helmet);
-    this.mats.shirt.color.set(this.colors.shirt);
-    this.mats.pants.color.set(this.colors.pants);
+    const C = this.colors, M = this.mats;
+    // paint finishes for unlockable frames and helmets
+    const finish = (mat, name, color) => {
+      mat.color.set(color);
+      const f = { raw: [0.9, 0.38, 0], matte: [0.1, 0.75, 0], chrome: [1, 0.06, 0], gold: [1, 0.18, 0], metal: [1, 0.22, 0], oilslick: [0.6, 0.2, 1] }[name] || [0.45, 0.32, 0];
+      mat.metalness = f[0]; mat.roughness = f[1];
+      if ('clearcoat' in mat) mat.clearcoat = name === 'matte' || name === 'raw' ? 0 : 1;
+      if ('iridescence' in mat) { mat.iridescence = f[2]; mat.iridescenceIOR = 1.8; mat.iridescenceThicknessRange = [100, 800]; }
+    };
+    finish(M.frame, C.frameFinish, C.frame);
+    finish(M.helmet, C.helmetFinish, C.helmet);
+    M.shirt.color.set(C.shirt);
+    M.pants.color.set(C.pants);
+    if (C.rims) { M.rim.color.set(C.rims); M.rim.metalness = C.rimsFinish === 'metal' ? 1 : 0.8; M.rim.roughness = C.rimsFinish === 'metal' ? 0.2 : 0.3; }
+    if (C.tires) M.tire.color.set(C.tires);
+    if (C.bars) {
+      M.bar.color.set(C.bars);
+      const shiny = ['#d8d8dc', '#e8e8ea'].includes(C.bars);
+      M.bar.metalness = shiny ? 1 : 0.35; M.bar.roughness = shiny ? 0.15 : 0.35;
+    }
   }
 
   setNameTag(text, color = '#ffffff') {

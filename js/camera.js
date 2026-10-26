@@ -19,6 +19,11 @@ export class ChaseCamera {
     this.g = makeGroundResult();
     this.fov = 62;
     this.time = 0;
+    this.distScale = 1;
+    this.baseFov = 60;
+    this.reduceMotion = false;
+    this.dip = 0; this.dipV = 0;
+    this.airPull = 0;
   }
 
   cycle() {
@@ -31,7 +36,9 @@ export class ChaseCamera {
     this.update(1, player, { orbitX: 0, orbitY: 0 }, true);
   }
 
-  addShake(a) { this.shake = Math.min(1, this.shake + a); }
+  addShake(a) { if (!this.reduceMotion) this.shake = Math.min(1, this.shake + a); }
+  // landing compression: the camera dips and recovers like a spring
+  addDip(a) { if (!this.reduceMotion) this.dipV -= a; }
 
   update(dt, player, input, snap = false) {
     this.time += dt;
@@ -52,9 +59,17 @@ export class ChaseCamera {
     let dist, height, lookH;
     switch (this.mode) {
       case 'far': dist = 7.5 + sp * 0.12; height = 3.0; lookH = 1.0; break;
-      case 'cinematic': dist = 5.5; height = 1.0; lookH = 1.0; break;
       default: dist = 3.9 + sp * 0.09; height = 1.55; lookH = 1.05;
     }
+    // pull back on big airs so you can see the landing coming
+    const airT = player.mode === 'air' && player.air ? player.air.t : 0;
+    this.airPull = damp(this.airPull, clamp((airT - 0.35) * 1.6, 0, 2.6), airT > 0 ? 2 : 4, dt);
+    dist = (dist + this.airPull) * this.distScale;
+    height += this.airPull * 0.35;
+    if (player.mode === 'bail') dist *= 1.15;
+    // spring for the landing dip
+    this.dipV += (-this.dip * 90 - this.dipV * 12) * dt;
+    this.dip += this.dipV * dt;
     const pitch = 0.22 + this.orbitPitch;
     const target = new THREE.Vector3(p.x, p.y + lookH, p.z);
     if (player.mode === 'bail' && player.bail) target.copy(player.bail.riderPos);
@@ -67,14 +82,10 @@ export class ChaseCamera {
       this.look.copy(desired).addScaledVector(fwd, 5).add(new THREE.Vector3(0, -0.6 + (player.mode === 'air' ? player.vel.y * 0.08 : 0), 0));
       this.cam.position.copy(this.pos);
       this.cam.lookAt(this.look);
-      this.applyFov(dt, sp, 78);
+      this.applyFov(dt, sp, this.baseFov + 16);
       return;
     }
-    if (this.mode === 'cinematic') {
-      // slow orbit around the rider
-      const a = this.time * 0.25;
-      desired = target.clone().add(new THREE.Vector3(Math.sin(a) * dist, height + 0.6, Math.cos(a) * dist));
-    } else {
+    {
       desired = new THREE.Vector3(
         target.x - Math.sin(yaw) * dist * Math.cos(pitch),
         target.y + height - 1 + Math.sin(pitch) * dist,
@@ -96,6 +107,7 @@ export class ChaseCamera {
       this.look.z = damp(this.look.z, target.z, 16, dt);
     }
     this.cam.position.copy(this.pos);
+    this.cam.position.y += this.dip * 0.6;
     if (this.shake > 0) {
       const s = this.shake * this.shake * 0.08;
       this.cam.position.x += (Math.random() - 0.5) * s;
@@ -103,7 +115,7 @@ export class ChaseCamera {
       this.shake = Math.max(0, this.shake - dt * 2.2);
     }
     this.cam.lookAt(this.look);
-    this.applyFov(dt, sp, 60);
+    this.applyFov(dt, sp, this.baseFov);
   }
 
   applyFov(dt, sp, base) {
