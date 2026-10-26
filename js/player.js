@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { RiderBike, BIKE } from './bikeModel.js';
 import { makeGroundResult } from './collision.js';
+import { Ragdoll } from './ragdoll.js';
 import { clamp, lerp, damp, dampAngle, wrapAngle, angleDiff, TAU } from './util.js';
 
 export const G = 11;
@@ -11,13 +12,13 @@ const PEDAL_MAX = 12.5;
 const STEP_UP = 0.14;
 
 export const TRICK_ANIMS = {
-  barspin:  { dur: 0.42, label: 'Barspin' },
-  tailwhip: { dur: 0.62, label: 'Tailwhip' },
-  superman: { dur: 0.9,  label: 'Superman', hold: true },
-  nohander: { dur: 0.75, label: 'No Hander', hold: true },
-  cancan:   { dur: 0.7,  label: 'Can Can', hold: true },
-  tabletop: { dur: 0.8,  label: 'Table Top', hold: true },
-  nofooter: { dur: 0.7,  label: 'No Footer', hold: true },
+  barspin:  { dur: 0.4,  label: 'Barspin' },
+  tailwhip: { dur: 0.58, label: 'Tailwhip' },
+  superman: { dur: 0.66, label: 'Superman', hold: true },
+  nohander: { dur: 0.58, label: 'No Hander', hold: true },
+  cancan:   { dur: 0.54, label: 'Can Can', hold: true },
+  tabletop: { dur: 0.6,  label: 'Table Top', hold: true },
+  nofooter: { dur: 0.54, label: 'No Footer', hold: true },
 };
 
 const tmpV = new THREE.Vector3(), tmpV2 = new THREE.Vector3(), tmpQ = new THREE.Quaternion();
@@ -316,7 +317,8 @@ export class Player {
     const u = a.t / a.dur;
     if (a.type === 'barspin') return u > 0.82 || u < 0.08;
     if (a.type === 'tailwhip') return u > 0.86 || u < 0.06;
-    return envelope(a.t, a.dur, false) < 0.35;
+    // poses: fine to land once you're mostly back on the bike
+    return a.t / a.dur > 0.55 && envelope(a.t, a.dur, false) < 0.75;
   }
 
   stepAir(dt, input, hopRelease) {
@@ -417,6 +419,7 @@ export class Player {
     this.mode = 'ground';
     this.landSquash = clamp(vn / 9, 0.15, 1);
     const flips = Math.round(A.flip / TAU);
+    if (this.anim) A.tricks.push({ type: this.anim.type, hold: this.anim.holdTime }); // finished on touchdown
     this.game.tricks.land(A, { flips, fakie, airtime: A.t, height: A.maxY - Math.min(A.startY, this.pos.y), vn });
     this.emit('land', { vn, big: A.t > 0.9 });
     this.anim = null; this.animQueue.length = 0;
@@ -455,6 +458,7 @@ export class Player {
     // land the air tricks first (grinding counts as a landing for combo purposes)
     if (A) {
       if (Math.abs(wrapAngle(A.flip)) > 0.8 || !this.animSafe()) { this.doBail('grind'); return; }
+      if (this.anim) A.tricks.push({ type: this.anim.type, hold: this.anim.holdTime });
       this.game.tricks.land(A, { flips: Math.round(A.flip / TAU), fakie: false, airtime: A.t, height: A.maxY - A.startY, vn: 0, intoGrind: true });
     }
     this.anim = null; this.animQueue.length = 0;
@@ -520,8 +524,8 @@ export class Player {
     if (!m) return;
     if (!input.manual) { this.endManual(true); return; }
     m.time += dt;
-    m.balVel += ((Math.random() - 0.5) * 2.6 + m.bal * (1.6 + m.time * 0.2)) * dt;
-    m.balVel += (m.nose ? 1 : -1) * input.flip * 3.2 * dt;
+    m.balVel += ((Math.random() - 0.5) * 2.0 + m.bal * (1.15 + m.time * 0.15)) * dt;
+    m.balVel += (m.nose ? 1 : -1) * input.flip * 3.8 * dt;
     m.balVel *= Math.exp(-0.5 * dt);
     m.bal += m.balVel * dt;
     this.game.tricks.manualTick(dt);
@@ -541,63 +545,35 @@ export class Player {
     this.mode = 'bail';
     this.grind = null; this.manual = null; this.air = null; this.anim = null; this.animQueue.length = 0;
     const sp = this.vel.length();
-    this.bail = {
-      t: 0, reason,
-      riderPos: this.pos.clone().add(new THREE.Vector3(0, 1, 0)),
-      riderVel: this.vel.clone().multiplyScalar(0.8).add(new THREE.Vector3(0, 2 + Math.random() * 2, 0)),
-      riderRot: new THREE.Vector3((Math.random() - 0.5) * 8, (Math.random() - 0.5) * 6, (Math.random() - 0.5) * 8),
-      bikeVel: this.vel.clone().multiplyScalar(0.6).add(new THREE.Vector3(0, 1.5, 0)),
-      bikeRot: new THREE.Vector3((Math.random() - 0.5) * 10, (Math.random() - 0.5) * 8, (Math.random() - 0.5) * 12),
-      bikePos: this.pos.clone(),
-      splash: reason === 'splash' || reason === 'water',
-    };
-    // detach visual parts into world space
-    const m = this.model;
-    m.rider.matrixWorld.decompose(tmpV, tmpQ, tmpV2);
-    this.bail.riderQuat = tmpQ.clone();
-    m.bike.matrixWorld.decompose(tmpV, tmpQ, tmpV2);
-    this.bail.bikeQuat = tmpQ.clone();
+    const splash = reason === 'splash' || reason === 'water';
+    this.ragdoll = this.ragdoll || new Ragdoll(this.col);
+    this.ragdoll.start(this.model, this.vel, { splash });
+    this.bail = { t: 0, reason, splash, riderPos: this.ragdoll.centre().clone(), lastThud: 0, peak: this.pos.y, dist: 0, start: this.pos.clone() };
     this.game.tricks.bail(reason);
-    this.emit('bail', { reason, speed: sp, splash: this.bail.splash });
+    this.emit('bail', { reason, speed: sp, splash, impact });
   }
 
   updateBail(dt, input) {
     const B = this.bail;
     B.t += dt;
-    const g = this.g2;
-    const sim = (p, v, rotV, q, r) => {
-      v.y -= G * dt;
-      p.addScaledVector(v, dt);
-      const gr = this.col.ground(p.x, p.z, p.y + 1, g);
-      if (p.y < gr.h + r) {
-        p.y = gr.h + r;
-        if (v.y < 0) v.y = -v.y * 0.3;
-        v.x *= Math.exp(-3 * dt); v.z *= Math.exp(-3 * dt);
-        rotV.multiplyScalar(Math.exp(-3.5 * dt));
-      }
-      if (B.splash && p.y < this.col.waterLevel) { v.multiplyScalar(Math.exp(-4 * dt)); v.y += 14 * dt; }
-      tmpQ.setFromEuler(new THREE.Euler(rotV.x * dt, rotV.y * dt, rotV.z * dt));
-      q.multiply(tmpQ);
-    };
-    sim(B.riderPos, B.riderVel, B.riderRot, B.riderQuat, 0.25);
-    sim(B.bikePos, B.bikeVel, B.bikeRot, B.bikeQuat, 0.25);
-    const m = this.model;
-    m.root.position.set(0, 0, 0); m.root.quaternion.identity();
-    m.root.updateMatrixWorld();
-    m.rider.position.copy(B.riderPos).add(new THREE.Vector3(0, -0.9, 0));
-    m.rider.quaternion.copy(B.riderQuat);
-    m.bike.position.copy(B.bikePos);
-    m.bike.quaternion.copy(B.bikeQuat);
-    Object.assign(m.pose, { superman: 0.3, nohander: 0.6, crouch: 0.4, nofooter: 0.5 });
-    m.updatePose();
+    const hit = this.ragdoll.update(dt);
+    B.riderPos.copy(this.ragdoll.centre());
+    B.peak = Math.max(B.peak, B.riderPos.y);
+    B.dist = Math.max(B.dist, Math.hypot(B.riderPos.x - B.start.x, B.riderPos.z - B.start.z));
     this.pos.copy(B.riderPos);
-    if (B.t > 2.2 || (B.t > 0.6 && input.resetPressed)) this.respawnSafe();
+    if (hit > 3.5 && B.t - B.lastThud > 0.12) { B.lastThud = B.t; this.emit('thud', { strength: hit }); }
+    const settled = B.t > 3.2;
+    if (settled || (B.t > 0.7 && (input.resetPressed || input.hopPressed))) {
+      this.ragdoll.active = false;
+      this.respawnSafe();
+    }
   }
 
   respawnSafe() {
     const s = this.lastSafe;
+    const tumble = this.bail ? this.bail.dist : 0;
     this.spawn(s.pos.x, s.pos.z, s.heading);
-    this.emit('respawn');
+    this.emit('respawn', { tumble });
   }
 
   // ---------------- visuals ----------------

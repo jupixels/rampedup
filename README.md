@@ -24,13 +24,17 @@ Share `?room=CODE` links to drop friends straight into your session.
   - **The Pool** — a round concrete bowl with tile and coping.
   - **The Channel** — a 120 m banked concrete ditch.
   - **Summit Ridge** — the top of a ~870 m downhill trail with doubles, drops and rollers.
-- **Real-feeling BMX physics** — pedalling, momentum, transitions and quarter pipes, vert airs that bring you back in, bunny hops (with late pop off lips), manuals, peg and ledge grinds with balance, bails with tumbling.
+- **Real-feeling BMX physics** — pedalling, momentum, transitions and quarter pipes, vert airs that bring you back in, bunny hops (with late pop off lips), manuals, peg and ledge grinds with balance, and full ragdoll bails: rider and bike tumble separately with slow-mo and a caption for every crash.
 - **Tricks & combos** — 180–1440 spins, front and back flips (doubles too), barspins, tailwhips, supermans, no-handers, can-cans, table tops and no-footers. Hold the button to extend a pose. Chain airs, grinds and manuals to build the multiplier; bail and the combo is gone.
 - **Obstacle courses** — five timed gate courses plus two score-attack modes, bronze/silver/gold medals, personal bests, and a **ghost** of your best run to race.
-- **38 golden sprockets** hidden around the world and **17 challenges** to complete. Progress is saved in your browser.
+- **38 golden sprockets** hidden around the world and **18 challenges** to complete. Progress is saved in your browser.
 - **Multiplayer** — peer-to-peer over WebRTC (PeerJS), so it works on static hosting. Quick Join a public room or host a private one with a 5-letter code. See other riders live with name tags, chat, a scoreboard, a trick feed, and **host-started races** with synced countdowns and results. If the host leaves, someone else takes over the room.
 - **Looks** — physically based materials with procedurally generated textures, a physical sky with four times of day, soft sun shadows, image-based lighting, GPU grass that sways in the wind, thousands of instanced trees, water, clouds, bloom, optional ambient occlusion, and filmic tone mapping. Resolution scales automatically to keep the frame rate up.
 - **Controls** — keyboard, gamepad (standard layout) and touch.
+
+## New to BMX games?
+
+Pick **Tutorial** in the main menu for a 14-step guided run (pedal, hop, air, spins, barspin, grind, manual, combos, flips, map), or open the **Guide** for every control, trick, spot and rule.
 
 ## Controls
 
@@ -88,13 +92,17 @@ js/terrain.js       heightmap generation, splat-mapped terrain shader
 js/props.js         ramp builder (profiles → meshes + colliders), rails, containers…
 js/collision.js     terrain + triangle-grid ground queries, rail registry
 js/player.js        BMX physics, airs, grinds, manuals, bails
+js/ragdoll.js       Verlet ragdoll for the rider and bike when you crash
+js/tutorial.js      interactive tutorial
 js/bikeModel.js     procedural bike + rider with IK and trick poses
 js/tricks.js        trick naming, scoring and combos
 js/courses.js       courses, ghosts, golden sprockets, challenges
 js/network.js       PeerJS multiplayer
 js/ui.js            menus, HUD, minimap, map, chat, touch controls
 js/audio.js         sound effects + procedural tyre/wind/freewheel layers
-js/textures.js      procedural PBR textures (no image assets)
+js/textures.js      procedural PBR textures (no image assets), built in Web Workers
+js/texpixels.js     pure pixel programs for the textures
+js/texworker.js     texture worker
 vendor/             three.js r186, PeerJS 1.5.5, sfx.js
 sounds/             sound effects
 ```

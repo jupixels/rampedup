@@ -16,6 +16,7 @@ import { Courses } from './courses.js';
 import { Audio } from './audio.js';
 import { Net } from './network.js';
 import { UI } from './ui.js';
+import { Tutorial } from './tutorial.js';
 import { ZONES, SPAWN } from './layout.js';
 import { store, clamp } from './util.js';
 
@@ -55,6 +56,20 @@ const GradeShader = {
       col += (h(vUv * 1000.0) - 0.5) * 0.018;
       gl_FragColor = vec4(col, c.a);
     }`,
+};
+
+// Captions for crashes, by cause
+const BAIL_LINES = {
+  wall: ['Face, meet wall', 'That wall came out of nowhere', 'Structural integrity: tested', 'Brakes are optional, apparently'],
+  hard: ['Cased it', 'Knees said no', 'Gravity wins again', 'That one echoed'],
+  flip: ['Under-rotated', 'Half a flip still counts, right?', 'So close. Not really.', 'Commit to the flip!'],
+  sideways: ['Sideways surprise', 'Landed like a shopping cart', 'Wrong way, champ'],
+  trick: ['Too much style, not enough air', 'Finish the trick first', 'Bars went one way, you went the other'],
+  balance: ['Rail: 1, You: 0', 'Lost the balance', 'Slipped a peg'],
+  grind: ['Rail: 1, You: 0', 'Caught a peg'],
+  splash: ['Splashdown!', 'Hope that bike floats', 'Swim team tryouts', 'Refreshing!'],
+  water: ['Splashdown!', 'Hope that bike floats'],
+  default: ['Yard sale!', 'Oof', 'Send it... to the ER', 'That will buff out'],
 };
 
 class Game {
@@ -117,6 +132,8 @@ class Game {
     this.courses = new Courses(this);
     dbg('courses');
     this.net = new Net(this);
+    this.tutorial = new Tutorial(this);
+    if (store('tutorialDone')) this.ui.markTutorialDone();
     this.setupComposer();
     dbg('composer');
     this.bindEvents();
@@ -183,8 +200,8 @@ class Game {
     this.clock.getDelta();
     if (!store('seenHelp')) {
       store('seenHelp', true);
-      setTimeout(() => this.ui.toast('W pedal · Space hop · J/K/L tricks'), 800);
-      setTimeout(() => this.ui.toast('Ride into a glowing marker and press E for a course'), 3500);
+      if (!this.tutorial.active && !store('tutorialDone')) setTimeout(() => this.ui.toast('New here? Press Esc and pick Tutorial'), 800);
+      setTimeout(() => this.ui.toast('W pedal · Space hop · J/K/L tricks'), 4500);
     }
   }
 
@@ -240,6 +257,7 @@ class Game {
   }
 
   onTrickEvent(e) {
+    this.tutorial?.onTrick(e);
     if (e.type === 'land' && e.name) {
       if (e.pts >= 600) this.audio.play('trick', { volume: 0.8 });
       this.ui.feed(`${e.name}  +${e.pts.toLocaleString()}`);
@@ -257,6 +275,7 @@ class Game {
   handlePlayerEvents() {
     const p = this.player;
     for (const ev of p.events) {
+      this.tutorial.onPlayerEvent(ev);
       switch (ev.type) {
         case 'land':
           this.audio.play(ev.vn > 7 ? 'landHard' : 'land', { volume: clamp(0.4 + ev.vn / 10, 0.4, 1.2) });
@@ -264,12 +283,25 @@ class Game {
           break;
         case 'hop': this.audio.play('hop'); break;
         case 'grindStart': this.audio.play('grind'); break;
-        case 'bail':
+        case 'bail': {
           this.audio.play('bail');
-          setTimeout(() => this.audio.play('bikeClang'), 120);
-          this.cam.addShake(0.8);
-          if (ev.reason === 'splash') this.ui.toast('Splashdown!');
+          setTimeout(() => this.audio.play('bikeClang', { vary: 0.15 }), 140 + Math.random() * 120);
+          this.cam.addShake(0.9);
+          this.bails = (this.bails || 0) + 1;
+          const lines = BAIL_LINES[ev.reason] || BAIL_LINES.default;
+          this.ui.bailCaption(lines[Math.floor(Math.random() * lines.length)], `Bail #${this.bails}`);
           this.courses.checkChallenges({ type: 'bail', reason: ev.reason });
+          break;
+        }
+        case 'thud':
+          this.audio.play(ev.strength > 7 ? 'landHard' : 'land', { volume: Math.min(1.2, 0.35 + ev.strength / 12), vary: 0.12, cooldown: 0.08 });
+          this.cam.addShake(Math.min(0.5, ev.strength / 25));
+          break;
+        case 'respawn':
+          if (ev.tumble > 0.5) {
+            this.ui.bailCaption(null, `Tumbled ${ev.tumble.toFixed(1)} m`);
+            this.courses.checkChallenges({ type: 'tumble', dist: ev.tumble });
+          }
           break;
         case 'bump': if (ev.strength > 2) this.audio.play('hop', { volume: 0.6 }); break;
       }
@@ -323,11 +355,14 @@ class Game {
           if (c) this.courses.start(c);
           else if (this.nearLift()) { const d = this.world.anchors.megaDeck; this.teleport(d.x, d.z, 0, true); this.ui.toast('Drop in when ready. Commit!'); }
         }
-        p.update(dt, input);
+        // slow motion for the first moments of a crash
+        const slow = p.mode === 'bail' && p.bail && p.bail.t < 0.55 ? 0.35 : 1;
+        p.update(dt * slow, input);
         this.tricks.update(dt, p);
         this.handlePlayerEvents();
         this.courses.update(dt);
       }
+      this.tutorial.update(dt);
       this.cam.update(dt, p, this.paused ? { orbitX: 0, orbitY: 0 } : input);
       this.ui.update(dt);
     } else {

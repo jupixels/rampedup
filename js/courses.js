@@ -107,6 +107,7 @@ export const CHALLENGES = [
   { id: 'sprocketsAll', name: 'Completionist', desc: 'Find every golden sprocket', test: (e, st, g) => g.courses.found.size >= g.courses.sprockets.length },
   { id: 'course', name: 'Gate Keeper', desc: 'Finish any course', test: (e) => e.type === 'courseDone' },
   { id: 'gold', name: 'Gold Standard', desc: 'Get a gold medal on any course', test: (e) => e.type === 'courseDone' && e.medal === 3 },
+  { id: 'tumble', name: 'Yard Sale', desc: 'Tumble 12 m in a single crash', test: (e) => e.type === 'tumble' && e.dist >= 12 },
   { id: 'splash', name: 'Splashdown', desc: 'Launch into the lake', test: (e) => e.type === 'bail' && e.reason === 'splash' },
 ];
 

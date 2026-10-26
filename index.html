@@ -37,11 +37,12 @@
       <p class="tagline">Open-world BMX. Find a line. Send it.</p>
       <nav class="menu-list">
         <button data-action="ride" class="primary">Ride</button>
+        <button data-action="tutorial" id="btn-tutorial">Tutorial <em class="badge">New</em></button>
         <button data-panel="mp">Multiplayer</button>
         <button data-panel="courses">Courses</button>
         <button data-panel="customize">Customize</button>
         <button data-panel="settings">Settings</button>
-        <button data-panel="controls">How to ride</button>
+        <button data-panel="controls">Guide</button>
       </nav>
       <div class="menu-foot">
         <span id="menu-stats"></span>
@@ -127,23 +128,83 @@
   </template>
 
   <template id="tpl-controls">
-    <div class="panel controls">
-      <h2>How to ride</h2>
+    <div class="panel guide">
+      <h2>Guide</h2>
+      <p class="muted">Everything you need to ride. Want to learn by doing? Start the <b>Tutorial</b> from the menu.</p>
+      <nav class="guide-nav">
+        <a href="#g-controls">Controls</a><a href="#g-riding">Riding</a><a href="#g-tricks">Tricks</a><a href="#g-grinds">Grinds</a><a href="#g-combos">Combos</a><a href="#g-spots">Spots</a><a href="#g-courses">Courses</a><a href="#g-mp">Multiplayer</a>
+      </nav>
+
+      <h3 id="g-controls">Controls</h3>
       <div class="ctrl-grid">
         <div><kbd>W</kbd> pedal · <kbd>S</kbd> brake</div><div>RT / LT</div>
         <div><kbd>A</kbd> <kbd>D</kbd> steer · spin in the air</div><div>Left stick</div>
         <div><kbd>W</kbd> / <kbd>S</kbd> in the air: front / back flip</div><div>Left stick ↑ ↓</div>
-        <div>Hold &amp; release <kbd>Space</kbd>: bunny hop (tap at a lip to pop)</div><div>A</div>
-        <div><kbd>Shift</kbd> manual — balance with <kbd>W</kbd>/<kbd>S</kbd></div><div>LB</div>
+        <div>Hold &amp; release <kbd>Space</kbd>: bunny hop</div><div>A</div>
+        <div><kbd>Shift</kbd> manual, balance with <kbd>W</kbd>/<kbd>S</kbd></div><div>LB</div>
         <div><kbd>J</kbd> barspin · <kbd>K</kbd> tailwhip</div><div>X · Y</div>
         <div><kbd>L</kbd> superman · <kbd>U</kbd> no hander · <kbd>I</kbd> can can</div><div>B · LB · RB</div>
-        <div><kbd>O</kbd> table top · <kbd>H</kbd> no footer (hold to extend)</div><div>D-pad ↓ ↑</div>
-        <div>Land on rails & ledges to grind — balance with <kbd>A</kbd>/<kbd>D</kbd>, <kbd>Space</kbd> to hop off</div><div></div>
-        <div><kbd>E</kbd> start course / use lift · <kbd>R</kbd> reset</div><div>D-pad ← → · Back</div>
-        <div><kbd>C</kbd> camera · <kbd>M</kbd> map · <kbd>T</kbd> chat · <kbd>Tab</kbd> riders</div><div>Stick click · —</div>
+        <div><kbd>O</kbd> table top · <kbd>H</kbd> no footer</div><div>D-pad ↓ ↑</div>
+        <div><kbd>E</kbd> start course / take lift · <kbd>R</kbd> reset</div><div>D-pad ← → · Back</div>
+        <div><kbd>C</kbd> camera · <kbd>M</kbd> map · <kbd>T</kbd> chat · <kbd>Tab</kbd> riders</div><div>Stick click</div>
         <div>Drag the mouse to look around</div><div>Right stick</div>
       </div>
-      <p class="muted small">Chain tricks, grinds and manuals before you touch the ground to build the multiplier. Bail and the combo's gone.</p>
+      <p class="small muted">On touch screens: the left stick steers and pedals (push up), HOP is the big button, and AUTO pedals for you.</p>
+
+      <h3 id="g-riding">Riding</h3>
+      <ul class="guide-list">
+        <li><b>Speed is everything.</b> Pedal into ramps. Rolling down a transition or a hill speeds you up; riding up one slows you down.</li>
+        <li><b>Bunny hop</b> by holding and releasing Space. The longer you crouch (up to about a third of a second), the higher you go. Release it right as you leave a ramp's lip to pop extra height.</li>
+        <li><b>Quarter pipes and the bowl</b> send you straight up and bring you back in. You turn around automatically on vert, so spin input there adds to it.</li>
+        <li>Too slow to make it up a ramp? You'll roll back and turn around on your own.</li>
+        <li><b>Ledges</b> taller than a curb stop you dead. Hop up them, or grind them.</li>
+      </ul>
+
+      <h3 id="g-tricks">Tricks</h3>
+      <div class="trick-grid">
+        <div><b>Spins</b><span>180 · 360 · 540… hold A/D in the air</span><em>100 – 5,000</em></div>
+        <div><b>Backflip / Frontflip</b><span>hold S / W in the air, release when upright</span><em>1,000 / 1,300</em></div>
+        <div><b>Barspin</b><span>J, tap twice for a double</span><em>350</em></div>
+        <div><b>Tailwhip</b><span>K, the frame whips around the bars</span><em>700</em></div>
+        <div><b>Superman</b><span>L, hold to stretch it out</span><em>450 + hold</em></div>
+        <div><b>No Hander</b><span>U, hold to stretch it out</span><em>400 + hold</em></div>
+        <div><b>Can Can</b><span>I, hold to stretch it out</span><em>350 + hold</em></div>
+        <div><b>Table Top</b><span>O, lay the bike flat</span><em>380 + hold</em></div>
+        <div><b>No Footer</b><span>H, feet off the pedals</span><em>400 + hold</em></div>
+      </div>
+      <p class="small muted">Airtime and height add bonus points. Repeating the same trick in one combo is worth half each time, so mix it up. Mix tricks into one air: a 360 Backflip Tailwhip is one huge trick.</p>
+
+      <h3 id="g-grinds">Grinds &amp; manuals</h3>
+      <ul class="guide-list">
+        <li>Land on any <b>rail, ledge, pipe or handrail</b> roughly lined up with it and you lock on. What you hold as you lock on picks the grind: nothing for a Double Peg, W for an Icepick, S for a Feeble, A/D for a Smith.</li>
+        <li>Keep the <b>balance meter</b> green with A/D. Hop off with Space for extra pop, or ride off the end.</li>
+        <li><b>Manual</b>: hold Shift while rolling and keep the meter centred with W/S. Holding Shift as you land drops you straight into one.</li>
+      </ul>
+
+      <h3 id="g-combos">Combos &amp; bails</h3>
+      <ul class="guide-list">
+        <li>Every trick you link before your wheels settle joins the combo, and each one adds to the <b>multiplier</b>. Grinds and manuals keep a combo alive between airs.</li>
+        <li>The combo banks a moment after you roll away clean. <b>Bail and it's gone.</b></li>
+        <li>You bail if you land mid-trick, sideways, upside-down, or too hard on flat ground, or if you hit a wall too fast. Press Space or R to get back on right away.</li>
+      </ul>
+
+      <h3 id="g-spots">Spots</h3>
+      <div class="spot-list" data-bind="spots"></div>
+
+      <h3 id="g-courses">Courses, sprockets &amp; challenges</h3>
+      <ul class="guide-list">
+        <li>Glowing rings mark course starts. Ride in and press E. Gate courses are timed and the arrow at the top points to the next gate. Score courses give you a time limit to rack up points.</li>
+        <li>Beat the times or scores for <b>bronze, silver and gold</b>. Your best run comes back as a blue <b>ghost</b> to race.</li>
+        <li><b>Golden sprockets</b> are hidden all over, some in mid-air over gaps. Gold dots on the map show the ones you haven't found.</li>
+        <li><b>Challenges</b> are listed under Courses. Progress saves in this browser.</li>
+      </ul>
+
+      <h3 id="g-mp">Multiplayer</h3>
+      <ul class="guide-list">
+        <li><b>Quick Join</b> drops you into the public room. <b>Host</b> makes a private room with a 5-letter code; share the code or copy the invite link.</li>
+        <li>The host can start a race on any gate course. Everyone gets a synced countdown and the results.</li>
+        <li>Press T to chat and hold Tab for the scoreboard. If the host leaves, someone else takes over the room.</li>
+      </ul>
     </div>
   </template>
 
@@ -167,6 +228,8 @@
     <div class="bank" id="hud-bank"></div>
     <div class="balance hidden" id="hud-balance"><i></i><span></span></div>
     <div class="bigtext" id="hud-big"></div>
+    <div class="bailcap" id="hud-bail"></div>
+    <div class="tutorial hidden" id="tutorial"></div>
     <div class="prompt hidden" id="hud-prompt"></div>
     <div class="feed" id="hud-feed"></div>
     <div class="toasts" id="toasts"></div>
@@ -203,12 +266,13 @@
       <div class="logo"><span class="logo-ramped">RAMPED</span><span class="logo-up">UP</span></div>
       <nav class="menu-list">
         <button data-action="resume" class="primary">Resume</button>
+        <button data-action="tutorial">Tutorial</button>
         <button data-action="openmap">Map & fast travel</button>
         <button data-panel="courses">Courses & challenges</button>
         <button data-panel="mp">Multiplayer</button>
         <button data-panel="customize">Customize</button>
         <button data-panel="settings">Settings</button>
-        <button data-panel="controls">How to ride</button>
+        <button data-panel="controls">Guide</button>
         <button data-action="quitcourse" class="hidden" id="btn-quitcourse">Quit course</button>
       </nav>
     </div>

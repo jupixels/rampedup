@@ -65,6 +65,7 @@ export class UI {
     this.click();
     switch (a) {
       case 'ride': g.startRiding(); break;
+      case 'tutorial': this.closePanels(); this.showPause(false); this.el.menu.classList.add('hidden'); this.el.hud.classList.remove('hidden'); g.tutorial.start(); break;
       case 'resume': g.setPaused(false); break;
       case 'openmap': this.openMap(); break;
       case 'closemap': this.closeMap(); break;
@@ -119,7 +120,7 @@ export class UI {
     host.appendChild(tpl.content.cloneNode(true));
     this.panelEl = host.firstElementChild;
     this.panelOpen = name + host.id;
-    const fn = { mp: 'renderMp', courses: 'renderCourses', customize: 'renderCustomize', settings: 'renderSettings' }[name];
+    const fn = { mp: 'renderMp', courses: 'renderCourses', customize: 'renderCustomize', settings: 'renderSettings', controls: 'renderGuide' }[name];
     if (fn) this[fn]();
   }
 
@@ -206,6 +207,24 @@ export class UI {
       }
     });
     this.game.focusRider = true;
+  }
+
+  renderGuide() {
+    const box = this.panelEl.querySelector('[data-bind=spots]');
+    for (const z of Object.values(ZONES)) {
+      const d = document.createElement('div');
+      d.innerHTML = `<i style="background:${z.color}"></i><b>${z.name}</b><span>${z.blurb}</span>`;
+      box.appendChild(d);
+    }
+    // in-panel jump links scroll the panel instead of changing the page URL
+    this.panelEl.querySelectorAll('.guide-nav a').forEach((a) => a.addEventListener('click', (e) => {
+      e.preventDefault();
+      this.panelEl.querySelector(a.getAttribute('href'))?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }));
+  }
+
+  markTutorialDone() {
+    document.querySelector('#btn-tutorial .badge')?.remove();
   }
 
   renderSettings() {
@@ -455,6 +474,17 @@ export class UI {
     const b = this.el.big;
     b.textContent = t;
     b.classList.remove('show'); void b.offsetWidth; b.classList.add('show');
+  }
+
+  bailCaption(title, sub = '') {
+    const el = document.getElementById('hud-bail');
+    if (title) {
+      el.innerHTML = `<b>${esc(title)}</b><span>${esc(sub)}</span><small>Space or R to get back on</small>`;
+      el.classList.remove('show', 'sub'); void el.offsetWidth; el.classList.add('show');
+    } else if (sub) {
+      el.innerHTML = `<span>${esc(sub)}</span>`;
+      el.classList.remove('show'); void el.offsetWidth; el.classList.add('show', 'sub');
+    }
   }
 
   bankPop(text, lost = false) {

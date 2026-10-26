@@ -391,7 +391,9 @@ export class RiderBike {
     place(this.parts.neck, chest.clone().addScaledVector(spineDir, -0.02), headPos);
     this.parts.head.position.copy(headPos);
     this.parts.head.rotation.set(-0.12 + sm * 0.55 - crouch * 0.08 + (chest.z - pelvis.z) * 0.6, 0, 0);
-    const fwd = V(0, 0, 1);
+    // joint positions (rider space) for the ragdoll to start from
+    const J = this.joints || (this.joints = { pelvis: V(), chest: V(), head: V(), shoulder: [V(), V()], elbow: [V(), V()], hand: [V(), V()], hip: [V(), V()], knee: [V(), V()], foot: [V(), V()] });
+    J.pelvis.copy(pelvis); J.chest.copy(chest); J.head.copy(headPos);
     for (let i = 0; i < 2; i++) {
       const s = i === 0 ? -1 : 1; // side
       const shoulder = chest.clone().addScaledVector(spineDir, -0.06).add(V(s * 0.19, 0, -0.02));
@@ -400,6 +402,7 @@ export class RiderBike {
       if (nh > 0) hand.lerp(V(s * 0.75, chest.y + 0.35, chest.z - 0.1), nh);
       if (P.barspin && Math.abs(Math.sin(P.barspin / 2)) > 0.2) hand.lerp(V(s * 0.25, grip[i].y + 0.05, grip[i].z - 0.1), 0.6);
       const elbow = solveIK(shoulder, hand, 0.3, 0.3, V(s * 0.8, -0.3, -0.6), V());
+      J.shoulder[i].copy(shoulder); J.elbow[i].copy(elbow); J.hand[i].copy(hand);
       place(this.parts.uArm[i], shoulder, elbow);
       place(this.parts.fArm[i], elbow, hand);
       this.parts.hand[i].position.copy(hand);
@@ -412,6 +415,7 @@ export class RiderBike {
       if (cc > 0 && i === 1) foot.lerp(V(-0.38, 0.7, 0.18), cc);
       if (tk > 0) foot.lerp(V(s * 0.12, pelvis.y - 0.3, pelvis.z + 0.25), tk * 0.6);
       const knee = solveIK(hip, foot, 0.45, 0.46, V(s * 0.12, 0.2, 1), V());
+      J.hip[i].copy(hip); J.knee[i].copy(knee); J.foot[i].copy(foot);
       place(this.parts.thigh[i], hip, knee);
       place(this.parts.shin[i], knee, foot);
       this.parts.kneePad[i].position.copy(knee).add(V(0, 0, 0.03));
