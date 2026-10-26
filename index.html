@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <title>Ramped Up — Open World BMX</title>
+  <meta name="description" content="Ramped Up: an open-world BMX game in your browser. Dirt jumps, a mega ramp, a downhill trail, obstacle courses and peer-to-peer multiplayer.">
+  <meta name="theme-color" content="#0e0f11">
+  <meta property="og:title" content="Ramped Up — Open World BMX">
+  <meta property="og:description" content="Ride, trick and race your friends in a browser BMX sandbox.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230e0f11'/%3E%3Ccircle cx='18' cy='42' r='10' fill='none' stroke='%23ff5a1f' stroke-width='5'/%3E%3Ccircle cx='46' cy='42' r='10' fill='none' stroke='%23ff5a1f' stroke-width='5'/%3E%3Cpath d='M18 42 L28 24 L42 24 L46 42 M28 24 L34 42' fill='none' stroke='%23f4f1ea' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Anton&family=Barlow+Condensed:ital,wght@0,500;0,600;0,700;0,800;1,700;1,800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <script type="importmap">
+    { "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/jsm/" } }
+  </script>
+  <script src="vendor/peerjs.min.js" defer></script>
+  <script src="vendor/sfx.js"></script>
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <!-- Loading -->
+  <section id="loading" class="screen">
+    <div class="logo"><span class="logo-ramped">RAMPED</span><span class="logo-up">UP</span></div>
+    <div class="load-bar"><i id="load-fill"></i></div>
+    <div id="load-text">Pumping tyres…</div>
+    <div id="load-error" class="hidden"></div>
+  </section>
+
+  <!-- Main menu -->
+  <section id="menu" class="screen hidden">
+    <div class="menu-left">
+      <div class="logo big"><span class="logo-ramped">RAMPED</span><span class="logo-up">UP</span></div>
+      <p class="tagline">Open-world BMX. Find a line. Send it.</p>
+      <nav class="menu-list">
+        <button data-action="ride" class="primary">Ride</button>
+        <button data-panel="mp">Multiplayer</button>
+        <button data-panel="courses">Courses</button>
+        <button data-panel="customize">Customize</button>
+        <button data-panel="settings">Settings</button>
+        <button data-panel="controls">How to ride</button>
+      </nav>
+      <div class="menu-foot">
+        <span id="menu-stats"></span>
+      </div>
+    </div>
+    <div class="menu-right" id="panel-host"></div>
+  </section>
+
+  <!-- Panels (moved into #panel-host or pause host as needed) -->
+  <template id="tpl-mp">
+    <div class="panel">
+      <h2>Multiplayer</h2>
+      <p class="muted">Peer-to-peer, no accounts. Share a room code or link and ride together.</p>
+      <div class="mp-status" data-bind="mpstatus"></div>
+      <div class="row">
+        <button class="btn primary" data-action="quick">Quick Join public room</button>
+      </div>
+      <div class="row">
+        <button class="btn" data-action="host">Host private room</button>
+      </div>
+      <div class="row join-row">
+        <input data-bind="code" maxlength="5" placeholder="CODE" autocomplete="off" spellcheck="false">
+        <button class="btn" data-action="join">Join</button>
+      </div>
+      <div class="row room-row hidden" data-bind="roomrow">
+        <div class="room-code" data-bind="roomcode"></div>
+        <button class="btn small" data-action="copylink">Copy invite link</button>
+        <button class="btn small ghost" data-action="leave">Leave</button>
+      </div>
+      <div class="race-host hidden" data-bind="racehost">
+        <h3>Start a race (host)</h3>
+        <div class="race-list" data-bind="racelist"></div>
+      </div>
+    </div>
+  </template>
+
+  <template id="tpl-courses">
+    <div class="panel">
+      <h2>Courses</h2>
+      <p class="muted">Ride to a glowing start marker and press <kbd>E</kbd>, or jump straight in here. Beat your ghost.</p>
+      <div class="course-list" data-bind="courselist"></div>
+      <h3>Challenges <span class="muted" data-bind="chcount"></span></h3>
+      <div class="challenge-list" data-bind="challist"></div>
+    </div>
+  </template>
+
+  <template id="tpl-customize">
+    <div class="panel">
+      <h2>Customize</h2>
+      <label class="field">Rider name <input data-bind="name" maxlength="16" spellcheck="false"></label>
+      <div class="swatch-group" data-part="frame"><span>Frame</span><div class="swatches"></div></div>
+      <div class="swatch-group" data-part="helmet"><span>Helmet</span><div class="swatches"></div></div>
+      <div class="swatch-group" data-part="shirt"><span>Jersey</span><div class="swatches"></div></div>
+      <div class="swatch-group" data-part="pants"><span>Pants</span><div class="swatches"></div></div>
+    </div>
+  </template>
+
+  <template id="tpl-settings">
+    <div class="panel">
+      <h2>Settings</h2>
+      <label class="field">Graphics quality
+        <select data-bind="quality">
+          <option value="low">Low — older laptops & phones</option>
+          <option value="medium">Medium</option>
+          <option value="high">High</option>
+          <option value="ultra">Ultra — big GPUs</option>
+        </select>
+      </label>
+      <label class="field">Time of day
+        <select data-bind="time">
+          <option value="golden">Golden hour</option>
+          <option value="midday">Midday</option>
+          <option value="sunset">Sunset</option>
+          <option value="overcast">Overcast</option>
+        </select>
+      </label>
+      <label class="field">Volume <input type="range" min="0" max="1" step="0.05" data-bind="volume"></label>
+      <label class="check"><input type="checkbox" data-bind="mute"> Mute</label>
+      <label class="check"><input type="checkbox" data-bind="fps"> Show FPS</label>
+      <label class="check"><input type="checkbox" data-bind="hints"> Show control hints</label>
+      <p class="muted small">Quality changes apply after reload.</p>
+    </div>
+  </template>
+
+  <template id="tpl-controls">
+    <div class="panel controls">
+      <h2>How to ride</h2>
+      <div class="ctrl-grid">
+        <div><kbd>W</kbd> pedal · <kbd>S</kbd> brake</div><div>RT / LT</div>
+        <div><kbd>A</kbd> <kbd>D</kbd> steer · spin in the air</div><div>Left stick</div>
+        <div><kbd>W</kbd> / <kbd>S</kbd> in the air: front / back flip</div><div>Left stick ↑ ↓</div>
+        <div>Hold &amp; release <kbd>Space</kbd>: bunny hop (tap at a lip to pop)</div><div>A</div>
+        <div><kbd>Shift</kbd> manual — balance with <kbd>W</kbd>/<kbd>S</kbd></div><div>LB</div>
+        <div><kbd>J</kbd> barspin · <kbd>K</kbd> tailwhip</div><div>X · Y</div>
+        <div><kbd>L</kbd> superman · <kbd>U</kbd> no hander · <kbd>I</kbd> can can</div><div>B · LB · RB</div>
+        <div><kbd>O</kbd> table top · <kbd>H</kbd> no footer (hold to extend)</div><div>D-pad ↓ ↑</div>
+        <div>Land on rails & ledges to grind — balance with <kbd>A</kbd>/<kbd>D</kbd>, <kbd>Space</kbd> to hop off</div><div></div>
+        <div><kbd>E</kbd> start course / use lift · <kbd>R</kbd> reset</div><div>D-pad ← → · Back</div>
+        <div><kbd>C</kbd> camera · <kbd>M</kbd> map · <kbd>T</kbd> chat · <kbd>Tab</kbd> riders</div><div>Stick click · —</div>
+        <div>Drag the mouse to look around</div><div>Right stick</div>
+      </div>
+      <p class="muted small">Chain tricks, grinds and manuals before you touch the ground to build the multiplier. Bail and the combo's gone.</p>
+    </div>
+  </template>
+
+  <!-- HUD -->
+  <section id="hud" class="hidden">
+    <div class="hud-tl">
+      <div class="zone" id="hud-zone">The Yard</div>
+      <div class="speed"><b id="hud-speed">0</b><small>km/h</small></div>
+      <div class="score">Score <b id="hud-score">0</b></div>
+    </div>
+    <div class="hud-tc" id="hud-course">
+      <div class="course-name" id="hud-cname"></div>
+      <div class="course-time" id="hud-ctime"></div>
+      <div class="course-sub" id="hud-csub"></div>
+    </div>
+    <div class="hud-compass" id="hud-compass"><i></i></div>
+    <div class="combo" id="hud-combo">
+      <div class="combo-text" id="hud-combo-text"></div>
+      <div class="combo-score" id="hud-combo-score"></div>
+    </div>
+    <div class="bank" id="hud-bank"></div>
+    <div class="balance hidden" id="hud-balance"><i></i><span></span></div>
+    <div class="bigtext" id="hud-big"></div>
+    <div class="prompt hidden" id="hud-prompt"></div>
+    <div class="feed" id="hud-feed"></div>
+    <div class="toasts" id="toasts"></div>
+    <canvas class="minimap" id="minimap" width="200" height="200"></canvas>
+    <div class="hints" id="hud-hints">
+      <span><kbd>W</kbd> pedal</span><span><kbd>Space</kbd> hop</span><span><kbd>J K L U I O</kbd> tricks</span><span><kbd>E</kbd> course</span><span><kbd>M</kbd> map</span><span><kbd>Esc</kbd> menu</span>
+    </div>
+    <div class="fps hidden" id="hud-fps"></div>
+    <div class="net-badge hidden" id="net-badge"></div>
+    <div class="chat" id="chat">
+      <div class="chat-log" id="chat-log"></div>
+      <input id="chat-input" class="hidden" maxlength="120" placeholder="Say something… (Enter)">
+    </div>
+    <div class="scoreboard hidden" id="scoreboard"></div>
+    <div class="result hidden" id="result"></div>
+  </section>
+
+  <!-- Big map -->
+  <section id="map" class="screen hidden">
+    <div class="map-wrap">
+      <canvas id="bigmap" width="900" height="900"></canvas>
+      <div class="map-side">
+        <h2>Map</h2>
+        <p class="muted">Click a spot to fast travel. Gold dots are sprockets you haven't found.</p>
+        <div id="map-travel"></div>
+        <button class="btn ghost" data-action="closemap">Close <kbd>M</kbd></button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Pause -->
+  <section id="pause" class="screen hidden">
+    <div class="menu-left">
+      <div class="logo"><span class="logo-ramped">RAMPED</span><span class="logo-up">UP</span></div>
+      <nav class="menu-list">
+        <button data-action="resume" class="primary">Resume</button>
+        <button data-action="openmap">Map & fast travel</button>
+        <button data-panel="courses">Courses & challenges</button>
+        <button data-panel="mp">Multiplayer</button>
+        <button data-panel="customize">Customize</button>
+        <button data-panel="settings">Settings</button>
+        <button data-panel="controls">How to ride</button>
+        <button data-action="quitcourse" class="hidden" id="btn-quitcourse">Quit course</button>
+      </nav>
+    </div>
+    <div class="menu-right" id="pause-panel-host"></div>
+  </section>
+
+  <!-- Touch controls -->
+  <section id="touch" class="hidden">
+    <div class="stick" id="stick"><i></i></div>
+    <div class="tbtns">
+      <button data-t="hop" class="t-hop">HOP</button>
+      <button data-t="manual" class="t-man">MANUAL</button>
+      <button data-t="barspin">BAR</button>
+      <button data-t="tailwhip">WHIP</button>
+      <button data-t="superman">SUPER</button>
+      <button data-t="nohander">NO HAND</button>
+    </div>
+    <div class="ttop">
+      <button data-b="pausePressed">II</button>
+      <button data-b="resetPressed">↺</button>
+      <button data-b="camPressed">CAM</button>
+      <button data-b="interactPressed">E</button>
+      <button data-auto="1" class="t-auto">AUTO</button>
+    </div>
+  </section>
+
+  <noscript><p class="noscript">Ramped Up needs JavaScript and WebGL.</p></noscript>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

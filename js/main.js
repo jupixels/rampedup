@@ -1,0 +1,341 @@
+// Ramped Up — bootstrap and main loop.
+import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
+import { buildWorld, Environment } from './world.js';
+import { setAnisotropy } from './textures.js';
+import { Player } from './player.js';
+import { Tricks } from './tricks.js';
+import { Input } from './input.js';
+import { ChaseCamera } from './camera.js';
+import { Courses } from './courses.js';
+import { Audio } from './audio.js';
+import { Net } from './network.js';
+import { UI } from './ui.js';
+import { ZONES, SPAWN } from './layout.js';
+import { store, clamp } from './util.js';
+
+const QUALITY = {
+  low:    { pr: 1,    shadows: 1024, shadowRange: 45, trees: 900,  rocks: 160, grass: false, msaa: 0, bloom: false, gtao: false },
+  medium: { pr: 1.25, shadows: 2048, shadowRange: 60, trees: 1800, rocks: 300, grass: true, grassSpacing: 0.3, grassRadius: 26, msaa: 2, bloom: true, gtao: false },
+  high:   { pr: 1.5,  shadows: 2048, shadowRange: 70, trees: 2600, rocks: 420, grass: true, grassSpacing: 0.22, grassRadius: 34, msaa: 4, bloom: true, gtao: false },
+  ultra:  { pr: 2,    shadows: 4096, shadowRange: 85, trees: 3600, rocks: 600, grass: true, grassSpacing: 0.17, grassRadius: 42, msaa: 4, bloom: true, gtao: true },
+};
+
+const GradeShader = {
+  uniforms: { tDiffuse: { value: null }, uTime: { value: 0 }, uVig: { value: 0.32 } },
+  vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
+  fragmentShader: `
+    uniform sampler2D tDiffuse; uniform float uTime; uniform float uVig; varying vec2 vUv;
+    float h(vec2 p){ return fract(sin(dot(p, vec2(12.9898,78.233)) + uTime) * 43758.5453); }
+    void main(){
+      vec4 c = texture2D(tDiffuse, vUv);
+      // gentle S-curve + saturation
+      vec3 col = c.rgb;
+      col = mix(col, col*col*(3.0-2.0*col), 0.22);
+      float l = dot(col, vec3(0.299,0.587,0.114));
+      col = mix(vec3(l), col, 1.08);
+      // vignette
+      vec2 d = vUv - 0.5; d.x *= 1.2;
+      col *= 1.0 - uVig * smoothstep(0.25, 0.85, length(d));
+      // fine grain
+      col += (h(vUv * 1000.0) - 0.5) * 0.018;
+      gl_FragColor = vec4(col, c.a);
+    }`,
+};
+
+class Game {
+  constructor() {
+    this.settings = Object.assign({
+      name: 'Rider' + Math.floor(Math.random() * 900 + 100),
+      colors: { frame: '#ff5a1f', helmet: '#f2f2f2', shirt: '#1d2b3a', pants: '#2a2a2a' },
+      quality: null, time: 'golden', fps: false, hints: true, cam: 'chase',
+    }, store('settings') || {});
+    this.touch = matchMedia('(pointer: coarse)').matches && !matchMedia('(pointer: fine)').matches;
+    if (!this.settings.quality) this.settings.quality = this.touch ? 'low' : 'high';
+    this.q = QUALITY[this.settings.quality] || QUALITY.high;
+    this.playing = false;
+    this.paused = false;
+    this.clock = { last: performance.now(), getDelta() { const n = performance.now(); const d = (n - this.last) / 1000; this.last = n; return d; } };
+    this.menuT = 0;
+  }
+
+  saveSettings() { store('settings', this.settings); }
+
+  async init() {
+    const canvas = document.getElementById('game');
+    this.ui = new UI(this);
+    let renderer;
+    try {
+      renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', stencil: false });
+    } catch (e) {
+      this.ui.error('Your browser could not start WebGL 2.<br>Try an up-to-date Chrome, Edge, Firefox or Safari, and make sure hardware acceleration is enabled.');
+      throw e;
+    }
+    this.renderer = renderer;
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, this.q.pr));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.shadowMap.enabled = this.q.shadows > 0;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    setAnisotropy(Math.min(8, renderer.capabilities.getMaxAnisotropy()));
+
+    this.scene = new THREE.Scene();
+    this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.08, 9000);
+    this.env = new Environment(this.scene, renderer, this.q);
+    this.env.setTime(this.settings.time);
+
+    this.audio = new Audio();
+    const audioP = this.audio.load().catch((e) => console.warn('audio', e));
+
+    this.world = await buildWorld(this.scene, renderer, this.q, (t, p) => this.ui.loading(t, p));
+    this.ui.loading('Tuning the bike', 0.88);
+    await new Promise((r) => setTimeout(r, 0));
+    this.tricks = new Tricks(this);
+    this.input = new Input();
+    this.player = new Player(this, this.settings.colors);
+    this.player.spawn(SPAWN.x, SPAWN.z, SPAWN.yaw);
+    this.cam = new ChaseCamera(this.camera, this.world.collision);
+    this.cam.mode = this.settings.cam || 'chase';
+    this.courses = new Courses(this);
+    this.net = new Net(this);
+    this.setupComposer();
+    this.ui.buildMapImage();
+    this.bindEvents();
+    // warm up shaders
+    this.ui.loading('Warming up', 0.95);
+    renderer.compile(this.scene, this.camera);
+    await audioP;
+    this.ui.hideLoading();
+    this.ui.showMenu();
+    if (this.touch) this.ui.setupTouch(this.input);
+    this.ui.showTouch(false);
+    this.ui.applyPrefs();
+    // invite link
+    const room = new URLSearchParams(location.search).get('room');
+    if (room) {
+      const btn = document.querySelector('#menu [data-panel=mp]');
+      this.ui.openPanel('mp', document.getElementById('panel-host'), btn);
+    }
+    renderer.setAnimationLoop(() => this.frame());
+  }
+
+  setupComposer() {
+    const r = this.renderer, q = this.q;
+    const size = r.getDrawingBufferSize(new THREE.Vector2());
+    const rt = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples: q.msaa });
+    this.composer = new EffectComposer(r, rt);
+    this.composer.addPass(new RenderPass(this.scene, this.camera));
+    if (q.gtao) {
+      const ao = new GTAOPass(this.scene, this.camera, size.x, size.y);
+      ao.output = GTAOPass.OUTPUT.Default;
+      ao.blendIntensity = 0.85;
+      ao.updateGtaoMaterial({ radius: 0.6, distanceExponent: 1, thickness: 1, scale: 1 });
+      this.composer.addPass(ao);
+    }
+    if (q.bloom) this.composer.addPass(new UnrealBloomPass(new THREE.Vector2(size.x / 2, size.y / 2), 0.1, 0.35, 1.8));
+    this.composer.addPass(new OutputPass());
+    this.grade = new ShaderPass(GradeShader);
+    this.composer.addPass(this.grade);
+  }
+
+  bindEvents() {
+    window.addEventListener('resize', () => {
+      const w = window.innerWidth, h = window.innerHeight;
+      this.renderer.setSize(w, h);
+      this.composer.setPixelRatio(this.renderer.getPixelRatio());
+      this.composer.setSize(w, h);
+      this.camera.aspect = w / h;
+      this.camera.updateProjectionMatrix();
+    });
+    document.addEventListener('visibilitychange', () => { if (document.hidden && this.playing && !this.net.online) this.setPaused(true); });
+    this.tricks.on((e) => this.onTrickEvent(e));
+  }
+
+  startRiding() {
+    this.playing = true;
+    this.ui.hideMenu();
+    this.ui.showTouch(true);
+    this.cam.snap(this.player);
+    this.clock.getDelta();
+    if (!store('seenHelp')) {
+      store('seenHelp', true);
+      setTimeout(() => this.ui.toast('W pedal · Space hop · J/K/L tricks'), 800);
+      setTimeout(() => this.ui.toast('Ride into a glowing marker and press E for a course'), 3500);
+    }
+  }
+
+  setPaused(on, fromMap = false) {
+    if (!this.playing) return;
+    this.paused = on;
+    if (!fromMap) this.ui.showPause(on);
+    this.ui.showTouch(!on);
+    this.input.keys.clear();
+  }
+
+  teleport(x, z, yaw = null, top = false) {
+    if (this.courses.run) this.courses.cancel(true);
+    if (yaw === null) yaw = this.player.heading;
+    this.player.spawn(x, z, yaw, top);
+    this.cam.snap(this.player);
+  }
+
+  startRace(courseId, startAt) {
+    const c = this.courses.list.find((x) => x.id === courseId);
+    if (!c) return;
+    if (!this.playing) this.startRiding();
+    this.setPaused(false);
+    this.ui.closeMap?.();
+    this.courses.start(c, { race: true, startAt: startAt });
+    this.ui.toast(`Race: ${c.name} — get ready!`);
+  }
+
+  zoneName() {
+    const p = this.player.pos;
+    for (const z of Object.values(ZONES)) if (Math.abs(p.x - z.x) < z.hx + 10 && Math.abs(p.z - z.z) < z.hz + 10) return z.name;
+    const t = this.world.terrain;
+    if (t.nearestOnPath(t.trail, p.x, p.z).d < 12) return 'Summit Trail';
+    if (Math.hypot(p.x + 610, p.z - 110) < 240) return 'Lakeside';
+    return p.y > 50 ? 'High Country' : 'Backcountry';
+  }
+
+  nearLift() {
+    const L = this.world.anchors.lift;
+    const p = this.player.pos;
+    return L && Math.hypot(p.x - L.x, p.z - L.z) < 4 && p.y < L.y + 2;
+  }
+
+  promptText() {
+    if (this.paused || this.courses.run) return null;
+    const c = this.courses.nearbyStart(this.player);
+    if (c) {
+      const best = this.courses.best[c.id];
+      return `<kbd>E</kbd> Start ${c.name}${best ? ` <span class="muted">· best ${c.type === 'score' ? best.toLocaleString() : (Math.floor(best / 60) + ':' + (best % 60).toFixed(2).padStart(5, '0'))}</span>` : ''}`;
+    }
+    if (this.nearLift()) return '<kbd>E</kbd> Take the lift to the top of the mega ramp';
+    return null;
+  }
+
+  onTrickEvent(e) {
+    if (e.type === 'land' && e.name) {
+      if (e.pts >= 600) this.audio.play('trick', { volume: 0.8 });
+      this.ui.feed(`${e.name}  +${e.pts.toLocaleString()}`);
+    }
+    if (e.type === 'bank') {
+      this.ui.bankPop(`+${e.score.toLocaleString()}`);
+      if (e.score >= 8000) this.audio.play('bigCombo');
+      if (e.score >= 10000 && this.net.online) this.net.send({ t: 'feed', text: `landed a ${e.score.toLocaleString()} pt combo` });
+      if (this.net.online) this.net.send({ t: 'score', total: this.tricks.total });
+    }
+    if (e.type === 'comboLost') this.ui.bankPop('Combo lost', true);
+    this.courses.checkChallenges(e);
+  }
+
+  handlePlayerEvents() {
+    const p = this.player;
+    for (const ev of p.events) {
+      switch (ev.type) {
+        case 'land':
+          this.audio.play(ev.vn > 7 ? 'landHard' : 'land', { volume: clamp(0.4 + ev.vn / 10, 0.4, 1.2) });
+          this.cam.addShake(clamp((ev.vn - 4) / 10, 0, 0.7));
+          break;
+        case 'hop': this.audio.play('hop'); break;
+        case 'grindStart': this.audio.play('grind'); break;
+        case 'bail':
+          this.audio.play('bail');
+          setTimeout(() => this.audio.play('bikeClang'), 120);
+          this.cam.addShake(0.8);
+          if (ev.reason === 'splash') this.ui.toast('Splashdown!');
+          this.courses.checkChallenges({ type: 'bail', reason: ev.reason });
+          break;
+        case 'bump': if (ev.strength > 2) this.audio.play('hop', { volume: 0.6 }); break;
+      }
+    }
+    p.events.length = 0;
+  }
+
+  // keep the frame rate up by scaling render resolution
+  adaptResolution(rawDt) {
+    if (!this.playing || this.paused) return;
+    this.perf = this.perf || { t: 0, n: 0, acc: 0, scale: 1 };
+    const P = this.perf;
+    P.t += rawDt; P.n++; P.acc += rawDt;
+    if (P.t < 2) return;
+    const avg = P.acc / P.n;
+    let s = P.scale;
+    if (avg > 1 / 45 && s > 0.55) s = Math.max(0.55, s * 0.85);
+    else if (avg < 1 / 58 && s < 1) s = Math.min(1, s * 1.08);
+    P.t = 0; P.n = 0; P.acc = 0;
+    if (Math.abs(s - P.scale) > 0.01) {
+      P.scale = s;
+      const pr = Math.min(window.devicePixelRatio || 1, this.q.pr) * s;
+      this.renderer.setPixelRatio(pr);
+      this.composer.setPixelRatio(pr);
+      this.composer.setSize(window.innerWidth, window.innerHeight);
+    }
+  }
+
+  frame() {
+    const rawDt = this.clock.getDelta();
+    const dt = Math.min(0.05, rawDt);
+    if (!this.noAdapt) this.adaptResolution(rawDt);
+    const input = this.input.poll();
+    const p = this.player;
+    if (this.playing) {
+      if (input.pausePressed) {
+        if (this.ui.mapOpen) this.ui.closeMap();
+        else this.setPaused(!this.paused);
+      }
+      if (input.mapPressed) { if (this.ui.mapOpen) this.ui.closeMap(); else if (!this.paused) this.ui.openMap(); }
+      if (!this.paused) {
+        if (input.camPressed) { this.settings.cam = this.cam.cycle(); this.saveSettings(); this.ui.toast(`Camera: ${this.cam.mode}`); }
+        if (input.chatPressed) this.ui.openChat();
+        if (input.resetPressed && p.mode !== 'bail') {
+          if (this.courses.run && this.courses.run.state === 'running') this.courses.start(this.courses.run.course, {});
+          else p.respawnSafe();
+        }
+        if (input.interactPressed) {
+          const c = this.courses.nearbyStart(p);
+          if (c) this.courses.start(c);
+          else if (this.nearLift()) { const d = this.world.anchors.megaDeck; this.teleport(d.x, d.z, 0, true); this.ui.toast('Drop in when ready. Commit!'); }
+        }
+        p.update(dt, input);
+        this.tricks.update(dt, p);
+        this.handlePlayerEvents();
+        this.courses.update(dt);
+      }
+      this.cam.update(dt, p, this.paused ? { orbitX: 0, orbitY: 0 } : input);
+      this.ui.update(dt);
+    } else {
+      // menu: slow cinematic orbit over The Yard
+      this.menuT += dt;
+      p.updateVisual(dt);
+      const a = this.menuT * 0.05 + 0.6;
+      const focus = this.focusRider ? p.pos.clone().add(new THREE.Vector3(0, 1, 0)) : new THREE.Vector3(0, 4, -10);
+      const r = this.focusRider ? 3.6 : 70, h = this.focusRider ? 1.4 : 26;
+      const target = new THREE.Vector3(focus.x + Math.sin(a) * r, focus.y + h, focus.z + Math.cos(a) * r);
+      this.camera.position.lerp(target, this.focusRider ? 0.08 : 1);
+      this.camera.lookAt(focus);
+      this.courses.update(dt);
+    }
+    this.net.update(dt);
+    this.audio.update(p, this.paused || !this.playing);
+    const focus = this.playing ? p.pos : this.camera.position;
+    this.env.update(dt, this.playing ? p.pos : new THREE.Vector3(0, 0, 0));
+    this.world.update(dt, this.camera.position);
+    this.grade.uniforms.uTime.value = (this.grade.uniforms.uTime.value + dt) % 100;
+    this.composer.render(dt);
+  }
+}
+
+const game = new Game();
+window.__game = game;
+game.init().catch((e) => {
+  console.error(e);
+  game.ui?.error?.(`Failed to start: ${String(e && e.message || e)}<br><span class="muted">Try a different browser or lower the quality.</span>`);
+});
