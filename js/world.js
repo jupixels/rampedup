@@ -7,7 +7,7 @@ import { Collision } from './collision.js';
 import { Builder, Profile, profiles } from './props.js';
 import { WORLD, ZONES, LAKE } from './layout.js';
 import { rng, clamp, smoothstep } from './util.js';
-import { getTex, leafTexture, pineTexture, waterNormalTexture } from './textures.js';
+import { getTex, leafTexture, pineTexture, waterNormalTexture, preloadTextures } from './textures.js';
 
 // ---------------- Environment ----------------
 export const TIMES = {
@@ -298,18 +298,26 @@ function scatterTrees(scene, terrain, world, quality) {
     lists[kind].push(m);
     world.treePoints.push([x, z]);
   }
+  // Split each tree kind into spatial chunks so the camera and the shadow pass only draw nearby trees
+  const CH = 240;
+  const tint = new THREE.Color();
   kinds.forEach((k, i) => {
-    const L = lists[i];
-    if (!L.length) return;
-    const tm = new THREE.InstancedMesh(k.trunk, trunkMat, L.length);
-    const lm = new THREE.InstancedMesh(k.leaves, i >= 3 ? pineMat : leafMat, L.length);
-    const tint = new THREE.Color();
-    L.forEach((m, j) => {
-      tm.setMatrixAt(j, m); lm.setMatrixAt(j, m);
-      tint.setHSL(0.24 + (r() - 0.5) * 0.06, 0.35 + r() * 0.2, 0.42 + r() * 0.16);
-      lm.setColorAt(j, tint);
-    });
-    for (const mm of [tm, lm]) { mm.castShadow = quality.shadows > 0; mm.receiveShadow = true; mm.computeBoundingSphere(); scene.add(mm); }
+    const chunks = new Map();
+    for (const m of lists[i]) {
+      const key = Math.floor(m.elements[12] / CH) + ':' + Math.floor(m.elements[14] / CH);
+      if (!chunks.has(key)) chunks.set(key, []);
+      chunks.get(key).push(m);
+    }
+    for (const L of chunks.values()) {
+      const tm = new THREE.InstancedMesh(k.trunk, trunkMat, L.length);
+      const lm = new THREE.InstancedMesh(k.leaves, i >= 3 ? pineMat : leafMat, L.length);
+      L.forEach((m, j) => {
+        tm.setMatrixAt(j, m); lm.setMatrixAt(j, m);
+        tint.setHSL(0.24 + (r() - 0.5) * 0.06, 0.35 + r() * 0.2, 0.42 + r() * 0.16);
+        lm.setColorAt(j, tint);
+      });
+      for (const mm of [tm, lm]) { mm.castShadow = quality.shadows > 0; mm.receiveShadow = true; mm.computeBoundingSphere(); mm.matrixAutoUpdate = false; scene.add(mm); }
+    }
   });
   // collision: tree trunks as thin solid columns
   for (let i = 0; i < kinds.length; i++) for (const m of lists[i]) {
@@ -765,13 +773,19 @@ function buildChannel(B, A) {
 export async function buildWorld(scene, renderer, quality, progress = () => {}) {
   const world = { treePoints: [], trunks: [], anchors: {}, dynamic: [] };
   const tick = () => new Promise((r) => setTimeout(r, 0));
-  progress('Sculpting terrain', 0.08); await tick();
+  // textures are generated in worker threads while the terrain is sculpted on this one
+  progress('Painting textures', 0.05); await tick();
+  let texDone = 0;
+  const texP = preloadTextures((f) => { texDone = f; });
+  progress('Sculpting terrain', 0.1); await tick();
   const terrain = new Terrain();
   world.terrain = terrain;
   const collision = new Collision(terrain);
   collision.waterLevel = WORLD.waterLevel;
   world.collision = collision;
-  progress('Painting textures', 0.22); await tick();
+  progress('Painting textures', 0.15 + texDone * 0.2); await tick();
+  await texP;
+  progress('Laying concrete', 0.36); await tick();
   scene.add(terrain.buildMesh());
   progress('Building The Yard', 0.38); await tick();
   const B = new Builder(scene, collision, terrain);

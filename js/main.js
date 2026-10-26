@@ -21,9 +21,18 @@ import { store, clamp } from './util.js';
 
 const QUALITY = {
   low:    { pr: 1,    shadows: 1024, shadowRange: 45, trees: 900,  rocks: 160, grass: false, msaa: 0, bloom: false, gtao: false },
-  medium: { pr: 1.25, shadows: 2048, shadowRange: 60, trees: 1800, rocks: 300, grass: true, grassSpacing: 0.3, grassRadius: 26, msaa: 2, bloom: true, gtao: false },
-  high:   { pr: 1.5,  shadows: 2048, shadowRange: 70, trees: 2600, rocks: 420, grass: true, grassSpacing: 0.22, grassRadius: 34, msaa: 4, bloom: true, gtao: false },
+  medium: { pr: 1,    shadows: 2048, shadowRange: 55, trees: 1600, rocks: 260, grass: true, grassSpacing: 0.32, grassRadius: 24, msaa: 2, bloom: true, gtao: false },
+  high:   { pr: 1.5,  shadows: 2048, shadowRange: 65, trees: 2400, rocks: 380, grass: true, grassSpacing: 0.25, grassRadius: 30, msaa: 4, bloom: true, gtao: false },
   ultra:  { pr: 2,    shadows: 4096, shadowRange: 85, trees: 3600, rocks: 600, grass: true, grassSpacing: 0.17, grassRadius: 42, msaa: 4, bloom: true, gtao: true },
+};
+
+const SanitizeShader = {
+  uniforms: { tDiffuse: { value: null } },
+  vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
+  fragmentShader: `uniform sampler2D tDiffuse; varying vec2 vUv;
+    void main(){ vec4 c = texture2D(tDiffuse, vUv);
+      if (isnan(c.r) || isnan(c.g) || isnan(c.b) || isinf(c.r) || isinf(c.g) || isinf(c.b)) c = vec4(0.5, 0.5, 0.5, 1.0);
+      gl_FragColor = vec4(clamp(c.rgb, 0.0, 60.0), 1.0); }`,
 };
 
 const GradeShader = {
@@ -56,7 +65,7 @@ class Game {
       quality: null, time: 'golden', fps: false, hints: true, cam: 'chase',
     }, store('settings') || {});
     this.touch = matchMedia('(pointer: coarse)').matches && !matchMedia('(pointer: fine)').matches;
-    if (!this.settings.quality) this.settings.quality = this.touch ? 'low' : 'high';
+    if (!this.settings.quality) this.settings.quality = this.touch ? 'low' : 'medium';
     this.q = QUALITY[this.settings.quality] || QUALITY.high;
     this.playing = false;
     this.paused = false;
@@ -96,21 +105,28 @@ class Game {
     this.world = await buildWorld(this.scene, renderer, this.q, (t, p) => this.ui.loading(t, p));
     this.ui.loading('Tuning the bike', 0.88);
     await new Promise((r) => setTimeout(r, 0));
+    const T0 = performance.now(), dbg = (l) => location.search.includes('debug') && console.log('[load]', l, Math.round(performance.now() - T0));
     this.tricks = new Tricks(this);
     this.input = new Input();
     this.player = new Player(this, this.settings.colors);
+    dbg('player');
     this.player.spawn(SPAWN.x, SPAWN.z, SPAWN.yaw);
     this.cam = new ChaseCamera(this.camera, this.world.collision);
     this.cam.mode = this.settings.cam || 'chase';
+    dbg('cam');
     this.courses = new Courses(this);
+    dbg('courses');
     this.net = new Net(this);
     this.setupComposer();
-    this.ui.buildMapImage();
+    dbg('composer');
     this.bindEvents();
-    // warm up shaders
+    // compile shaders in parallel where the browser supports it, instead of stalling on the first frames
     this.ui.loading('Warming up', 0.95);
-    renderer.compile(this.scene, this.camera);
-    await audioP;
+    try { await renderer.compileAsync(this.scene, this.camera); } catch (e) { renderer.compile(this.scene, this.camera); }
+    await Promise.race([audioP, new Promise((r) => setTimeout(r, 1500))]);
+    // the map image isn't needed until the first frames are on screen
+    const idle = window.requestIdleCallback || ((f) => setTimeout(f, 300));
+    idle(() => this.ui.buildMapImage(), { timeout: 2000 });
     this.ui.hideLoading();
     this.ui.showMenu();
     if (this.touch) this.ui.setupTouch(this.input);
@@ -138,6 +154,8 @@ class Game {
       ao.updateGtaoMaterial({ radius: 0.6, distanceExponent: 1, thickness: 1, scale: 1 });
       this.composer.addPass(ao);
     }
+    // Guard against NaN/huge HDR pixels: bloom would smear a single bad pixel into a dark flash
+    if (q.bloom) this.composer.addPass(new ShaderPass(SanitizeShader));
     if (q.bloom) this.composer.addPass(new UnrealBloomPass(new THREE.Vector2(size.x / 2, size.y / 2), 0.1, 0.35, 1.8));
     this.composer.addPass(new OutputPass());
     this.grade = new ShaderPass(GradeShader);
@@ -259,21 +277,22 @@ class Game {
     p.events.length = 0;
   }
 
-  // keep the frame rate up by scaling render resolution
+  // Keep the frame rate up by lowering render resolution. Only ever steps down, and rarely,
+  // because every resize reallocates render targets.
   adaptResolution(rawDt) {
     if (!this.playing || this.paused) return;
-    this.perf = this.perf || { t: 0, n: 0, acc: 0, scale: 1 };
-    const P = this.perf;
-    P.t += rawDt; P.n++; P.acc += rawDt;
-    if (P.t < 2) return;
+    const P = this.perf || (this.perf = { t: -3, n: 0, acc: 0, scale: 1, slow: 0 });
+    P.t += rawDt;
+    if (P.t < 0) return; // let the first seconds settle
+    P.n++; P.acc += Math.min(rawDt, 0.1);
+    if (P.t < 3) return;
     const avg = P.acc / P.n;
-    let s = P.scale;
-    if (avg > 1 / 45 && s > 0.55) s = Math.max(0.55, s * 0.85);
-    else if (avg < 1 / 58 && s < 1) s = Math.min(1, s * 1.08);
     P.t = 0; P.n = 0; P.acc = 0;
-    if (Math.abs(s - P.scale) > 0.01) {
-      P.scale = s;
-      const pr = Math.min(window.devicePixelRatio || 1, this.q.pr) * s;
+    P.slow = avg > 1 / 40 ? P.slow + 1 : 0;
+    if (P.slow >= 2 && P.scale > 0.62) {
+      P.slow = 0;
+      P.scale = Math.max(0.6, P.scale * 0.8);
+      const pr = Math.min(window.devicePixelRatio || 1, this.q.pr) * P.scale;
       this.renderer.setPixelRatio(pr);
       this.composer.setPixelRatio(pr);
       this.composer.setSize(window.innerWidth, window.innerHeight);

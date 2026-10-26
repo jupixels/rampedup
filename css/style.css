@@ -38,7 +38,7 @@ kbd { font-family: var(--ui); font-weight: 700; font-size: 0.85em; padding: 1px 
 .logo.big { font-size: clamp(56px, 7.2vw, 108px); }
 
 #menu, #pause { display: grid; grid-template-columns: minmax(320px, 520px) 1fr; background: linear-gradient(90deg, rgba(14,15,17,0.92) 0%, rgba(14,15,17,0.75) 38%, rgba(14,15,17,0.25) 70%, rgba(14,15,17,0.05) 100%); }
-#pause { background: rgba(10,11,13,0.72); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+#pause { background: rgba(10,11,13,0.8); }
 .menu-left { padding: clamp(28px, 6vh, 72px) clamp(24px, 4vw, 64px); display: flex; flex-direction: column; gap: 18px; position: relative; z-index: 1; overflow-y: auto; overflow-x: hidden; }
 .menu-left .logo { padding-right: 0.3em; }
 .tagline { margin: 0 0 18px; font-size: 22px; font-weight: 600; letter-spacing: 0.04em; color: var(--muted); text-transform: uppercase; }
@@ -52,7 +52,7 @@ kbd { font-family: var(--ui); font-weight: 700; font-size: 0.85em; padding: 1px 
 .menu-foot { margin-top: auto; color: var(--muted); font-size: 16px; letter-spacing: 0.05em; text-transform: uppercase; }
 .menu-right { position: relative; z-index: 1; display: flex; align-items: center; justify-content: flex-start; padding: 40px; overflow-y: auto; }
 
-.panel { width: min(560px, 100%); background: rgba(14,15,17,0.86); border: 1px solid var(--line); border-left: 6px solid var(--accent); padding: 26px 30px 30px; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); max-height: calc(100vh - 80px); overflow-y: auto; animation: pin .25s ease; }
+.panel { width: min(560px, 100%); background: rgba(14,15,17,0.94); border: 1px solid var(--line); border-left: 6px solid var(--accent); padding: 26px 30px 30px; max-height: calc(100vh - 80px); overflow-y: auto; animation: pin .25s ease; }
 @keyframes pin { from { opacity: 0; transform: translateX(16px); } }
 .panel h2 { font-family: var(--display); font-weight: 400; font-size: 40px; margin: 0 0 10px; text-transform: uppercase; letter-spacing: 0.01em; }
 .panel h3 { font-size: 22px; text-transform: uppercase; letter-spacing: 0.05em; margin: 22px 0 10px; }
@@ -124,7 +124,7 @@ input:focus, select:focus { border-color: var(--accent); }
 @keyframes bank { 0% { opacity: 0; transform: translateX(-50%) skewX(var(--skew)) scale(1.4); } 12% { opacity: 1; transform: translateX(-50%) skewX(var(--skew)) scale(1); } 80% { opacity: 1; } 100% { opacity: 0; transform: translateX(-50%) skewX(var(--skew)) translateY(-30px); } }
 .balance { position: absolute; left: 50%; top: 62%; width: 260px; height: 10px; margin-left: -130px; background: rgba(0,0,0,0.45); border: 1px solid rgba(255,255,255,0.4); transform: skewX(var(--skew)); }
 .balance::before { content: ''; position: absolute; left: 50%; top: -4px; bottom: -4px; width: 2px; background: var(--paper); }
-.balance i { position: absolute; top: -3px; bottom: -3px; width: 12px; margin-left: -6px; left: 50%; background: var(--good); }
+.balance i { position: absolute; top: -3px; bottom: -3px; width: 12px; margin-left: -6px; left: 50%; background: var(--good); will-change: transform; }
 .balance span { position: absolute; top: 14px; left: 0; right: 0; text-align: center; font-size: 15px; letter-spacing: 0.1em; text-transform: uppercase; }
 .bigtext { position: absolute; left: 50%; top: 40%; transform: translate(-50%, -50%); font-family: var(--display); font-size: 140px; color: var(--paper); opacity: 0; }
 .bigtext.show { animation: big 0.9s ease forwards; }
@@ -160,7 +160,7 @@ input:focus, select:focus { border-color: var(--accent); }
 .result td { padding: 2px 12px; }
 
 /* ---------- map ---------- */
-#map { z-index: 25; background: rgba(10,11,13,0.86); display: flex; align-items: center; justify-content: center; backdrop-filter: blur(6px); }
+#map { z-index: 25; background: rgba(10,11,13,0.92); display: flex; align-items: center; justify-content: center; }
 .map-wrap { display: flex; gap: 28px; align-items: stretch; max-width: 96vw; max-height: 92vh; }
 #bigmap { width: min(82vh, 62vw); height: min(82vh, 62vw); border: 2px solid var(--line); cursor: crosshair; }
 .map-side { width: 280px; display: flex; flex-direction: column; gap: 10px; }

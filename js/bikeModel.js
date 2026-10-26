@@ -24,7 +24,7 @@ function treadTexture() {
   if (sharedTex) return sharedTex;
   const c = document.createElement('canvas');
   c.width = 256; c.height = 32;
-  const g = c.getContext('2d');
+  const g = c.getContext('2d', { willReadFrequently: true });
   g.fillStyle = '#808080'; g.fillRect(0, 0, 256, 32);
   for (let i = 0; i < 32; i++) {
     g.fillStyle = '#d0d0d0';
@@ -107,7 +107,10 @@ function solveIK(a, target, l1, l2, pole, outMid) {
   const cosA = (l1 * l1 + dist * dist - l2 * l2) / (2 * l1 * dist);
   const sinA = Math.sqrt(Math.max(0, 1 - cosA * cosA));
   // bend direction: pole projected perpendicular to d
-  const p = pole.clone().addScaledVector(d, -pole.dot(d)).normalize();
+  const p = pole.clone().addScaledVector(d, -pole.dot(d));
+  if (p.lengthSq() < 1e-8) p.set(0, 0, 1).addScaledVector(d, -d.z);
+  if (p.lengthSq() < 1e-8) p.set(1, 0, 0);
+  p.normalize();
   outMid.copy(a).addScaledVector(d, cosA * l1).addScaledVector(p, sinA * l1);
   return outMid;
 }
@@ -132,7 +135,7 @@ export class RiderBike {
       skin: new THREE.MeshStandardMaterial({ color: 0xc89878, roughness: 0.7 }),
       helmet: new THREE.MeshPhysicalMaterial({ color: this.colors.helmet, roughness: 0.25, clearcoat: 1, clearcoatRoughness: 0.08 }),
       visor: new THREE.MeshStandardMaterial({ color: 0x0b0b0c, roughness: 0.15, metalness: 0.6 }),
-      lens: new THREE.MeshPhysicalMaterial({ color: 0x2a1a08, metalness: 0.9, roughness: 0.05, iridescence: 1, iridescenceIOR: 1.6, clearcoat: 1 }),
+      lens: new THREE.MeshStandardMaterial({ color: 0x3a2410, metalness: 0.9, roughness: 0.12 }),
       strap: new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.8 }),
       shoe: new THREE.MeshStandardMaterial({ color: 0xf0efe9, roughness: 0.8 }),
       sole: new THREE.MeshStandardMaterial({ color: 0x2b2420, roughness: 0.9 }),
@@ -373,7 +376,8 @@ export class RiderBike {
     const spineDir = v[6].subVectors(chest, pelvis).normalize();
     const place = (mesh, a, b) => {
       mesh.position.copy(a).add(b).multiplyScalar(0.5);
-      mesh.quaternion.setFromUnitVectors(UP, this._tmp.subVectors(b, a).normalize());
+      const d = this._tmp.subVectors(b, a);
+      if (d.lengthSq() > 1e-10) mesh.quaternion.setFromUnitVectors(UP, d.normalize());
     };
     this._tmp = this._tmp || new THREE.Vector3();
     // torso lathe spans 0.48 along its local y from the pelvis

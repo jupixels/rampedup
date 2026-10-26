@@ -37,7 +37,7 @@ export class UI {
   }
 
   // ---------- loading ----------
-  loading(text, p) { this.el.loadText.textContent = text; this.el.loadFill.style.width = `${Math.round(p * 100)}%`; }
+  loading(text, p) { if (location.search.includes('debug')) console.log('[load]', text, Math.round(performance.now())); this.el.loadText.textContent = text; this.el.loadFill.style.width = `${Math.round(p * 100)}%`; }
   error(msg) { this.el.loadError.innerHTML = msg; this.el.loadError.classList.remove('hidden'); this.el.loadText.textContent = 'Something went wrong'; }
   hideLoading() { this.el.loading.classList.add('hidden'); }
 
@@ -321,6 +321,7 @@ export class UI {
 
   openMap() {
     const g = this.game;
+    if (!this.mapImg) this.buildMapImage();
     this.el.map.classList.remove('hidden');
     this.el.pause.classList.add('hidden');
     this.closePanels();
@@ -365,37 +366,42 @@ export class UI {
   update(dt) {
     const g = this.game, p = g.player, el = this.el;
     this.frame++;
-    el.speed.textContent = Math.round(p.speed * 3.6);
-    el.score.textContent = g.tricks.total.toLocaleString();
-    if (this.frame % 15 === 0) el.zone.textContent = g.zoneName();
+    // only touch the DOM when something changed: layout work every frame adds up
+    const cache = this._dom || (this._dom = new Map());
+    const set = (node, v, html = false) => { if (cache.get(node) === v) return; cache.set(node, v); if (html) node.innerHTML = v; else node.textContent = v; };
+    const cls = (node, c, on) => { const k = c + '|'; const key = node; const prev = cache.get(k + (node.id || '')); if (prev === on) return; cache.set(k + (node.id || ''), on); node.classList.toggle(c, on); };
+    set(el.speed, String(Math.round(p.speed * 3.6)));
+    set(el.score, g.tricks.total.toLocaleString());
+    if (this.frame % 15 === 0) set(el.zone, g.zoneName());
     // combo
     const c = g.tricks.comboText();
     if (c) {
-      el.combo.classList.add('on');
-      if (c.text !== this._ct) { el.comboText.textContent = c.text; this._ct = c.text; }
-      el.comboScore.innerHTML = `${c.base.toLocaleString()} <em>×${c.mult}</em>`;
-    } else el.combo.classList.remove('on');
+      cls(el.combo, 'on', true);
+      set(el.comboText, c.text);
+      set(el.comboScore, `${c.base.toLocaleString()} <em>×${c.mult}</em>`, true);
+    } else cls(el.combo, 'on', false);
     // balance meter
     const bal = p.grind ? p.grind.bal : p.manual ? p.manual.bal : null;
-    el.balance.classList.toggle('hidden', bal === null);
+    cls(el.balance, 'hidden', bal === null);
     if (bal !== null) {
       const i = el.balance.firstElementChild;
-      i.style.left = `${50 + clamp(bal, -1, 1) * 50}%`;
-      i.style.background = Math.abs(bal) > 0.7 ? '#ff3b3b' : Math.abs(bal) > 0.4 ? '#ffd21f' : '#57e08a';
-      el.balance.lastElementChild.textContent = p.grind ? 'Balance  A / D' : 'Balance  W / S';
+      i.style.transform = `translateX(${(clamp(bal, -1, 1) * 130).toFixed(1)}px)`;
+      const col = Math.abs(bal) > 0.7 ? '#ff3b3b' : Math.abs(bal) > 0.4 ? '#ffd21f' : '#57e08a';
+      if (cache.get('balcol') !== col) { cache.set('balcol', col); i.style.background = col; }
+      set(el.balance.lastElementChild, p.grind ? 'Balance  A / D' : 'Balance  W / S');
     }
     // course
     const r = g.courses.run;
-    el.course.classList.toggle('on', !!r);
-    el.compass.classList.toggle('on', !!(r && r.course.type === 'gates' && r.state === 'running'));
+    cls(el.course, 'on', !!r);
+    cls(el.compass, 'on', !!(r && r.course.type === 'gates' && r.state === 'running'));
     if (r) {
-      el.cname.textContent = r.course.name + (r.opts.race ? ' · RACE' : '');
+      set(el.cname, r.course.name + (r.opts.race ? ' · RACE' : ''));
       if (r.course.type === 'score') {
-        el.ctime.textContent = r.state === 'running' ? Math.max(0, r.course.duration - r.time).toFixed(1) : r.course.duration.toFixed(1);
-        el.csub.textContent = `${(g.tricks.total - r.startScore).toLocaleString()} pts · gold ${r.course.par[2].toLocaleString()}`;
+        set(el.ctime, r.state === 'running' ? Math.max(0, r.course.duration - r.time).toFixed(1) : r.course.duration.toFixed(1));
+        set(el.csub, `${(g.tricks.total - r.startScore).toLocaleString()} pts · gold ${r.course.par[2].toLocaleString()}`);
       } else {
-        el.ctime.textContent = formatTime(r.time);
-        el.csub.textContent = `Gate ${Math.min(r.idx + 1, r.course.gates.length)} / ${r.course.gates.length}${g.courses.best[r.course.id] ? ' · PB ' + formatTime(g.courses.best[r.course.id]) : ''}`;
+        set(el.ctime, formatTime(r.time));
+        set(el.csub, `Gate ${Math.min(r.idx + 1, r.course.gates.length)} / ${r.course.gates.length}${g.courses.best[r.course.id] ? ' · PB ' + formatTime(g.courses.best[r.course.id]) : ''}`);
         const ng = g.courses.nextGate();
         if (ng) {
           const cam = g.camera;
@@ -408,12 +414,12 @@ export class UI {
     }
     // prompt
     const pr = g.promptText();
-    el.prompt.classList.toggle('hidden', !pr);
-    if (pr && pr !== this._pr) { el.prompt.innerHTML = pr; this._pr = pr; }
-    if (this.frame % 2 === 0 && !this.game.touchSmall) this.drawMinimap();
+    cls(el.prompt, 'hidden', !pr);
+    if (pr) set(el.prompt, pr, true);
+    if (this.frame % 3 === 0 && !this.game.touchSmall) this.drawMinimap();
     // scoreboard
     const showSB = g.input.state.scoreHeld;
-    el.scoreboard.classList.toggle('hidden', !showSB);
+    cls(el.scoreboard, 'hidden', !showSB);
     if (showSB && this.frame % 10 === 0) this.renderScoreboard();
     // fps
     this.fpsAcc.t += dt; this.fpsAcc.n++;

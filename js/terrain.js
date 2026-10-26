@@ -128,20 +128,38 @@ export class Terrain {
     }
   }
 
-  nearestOnPath(p, x, z) {
-    // coarse: check every sample pair
+  // Nearest point on a path. Uses a coarse grid of segments, so only nearby segments are tested.
+  nearestOnPath(p, x, z, maxD = 40) {
     let best = { d: 1e9, h: 0, s: 0 };
     const S = p.samples;
-    // quick bounding reject using stride
-    for (let k = 0; k < S.length - 1; k += 1) {
+    if (!p.grid) {
+      p.grid = new Map();
+      const C = 24;
+      for (let k = 0; k < S.length - 1; k++) {
+        const a = S[k], b = S[k + 1];
+        const x0 = Math.floor((Math.min(a.x, b.x) - 40) / C), x1 = Math.floor((Math.max(a.x, b.x) + 40) / C);
+        const z0 = Math.floor((Math.min(a.z, b.z) - 40) / C), z1 = Math.floor((Math.max(a.z, b.z) + 40) / C);
+        for (let i = x0; i <= x1; i++) for (let j = z0; j <= z1; j++) {
+          const key = i * 4096 + j;
+          let arr = p.grid.get(key);
+          if (!arr) p.grid.set(key, (arr = []));
+          arr.push(k);
+        }
+      }
+      p.gridC = C;
+    }
+    if (maxD > 40) maxD = 40;
+    const list = p.grid.get(Math.floor(x / p.gridC) * 4096 + Math.floor(z / p.gridC));
+    if (!list) return best;
+    for (let n = 0; n < list.length; n++) {
+      const k = list[n];
       const a = S[k], b = S[k + 1];
-      if (Math.abs(a.x - x) > 40 && Math.abs(b.x - x) > 40 && Math.sign(a.x - x) === Math.sign(b.x - x)) continue;
-      if (Math.abs(a.z - z) > 40 && Math.abs(b.z - z) > 40 && Math.sign(a.z - z) === Math.sign(b.z - z)) continue;
       const r = distToSegment(x, z, a.x, a.z, b.x, b.z);
       if (r.d < best.d) best = { d: r.d, h: lerp(a.h, b.h, r.t), s: lerp(a.s, b.s, r.t), k, t: r.t };
     }
     return best;
   }
+
 
   pathPoint(p, s) {
     const S = p.samples;

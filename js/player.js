@@ -130,7 +130,9 @@ export class Player {
   stepGround(dt, input, hopRelease) {
     const n = this.normal;
     const f = this.forward(tmpV);
-    f.addScaledVector(n, -f.dot(n)).normalize();
+    f.addScaledVector(n, -f.dot(n));
+    if (f.lengthSq() < 1e-6) f.set(0, 1, 0).addScaledVector(n, -n.y);
+    f.normalize();
     const lat = tmpV2.crossVectors(n, f).normalize();
     let vf = this.vel.dot(f), vl = this.vel.dot(lat);
     const surf = this.ground.surface;
@@ -609,7 +611,9 @@ export class Player {
     this.visHeading = dampAngle(this.visHeading, this.heading, this.mode === 'air' ? 40 : 18, dt);
     const n = this.visNormal;
     const f = tmpV.set(Math.sin(this.visHeading), 0, Math.cos(this.visHeading));
-    f.addScaledVector(n, -f.dot(n)).normalize();
+    f.addScaledVector(n, -f.dot(n));
+    if (f.lengthSq() < 1e-6) f.set(0, 1, 0).addScaledVector(n, -n.y); // facing straight into a vertical wall
+    f.normalize();
     const x = tmpV2.crossVectors(n, f).normalize();
     const basis = new THREE.Matrix4().makeBasis(x, n, f);
     const q = new THREE.Quaternion().setFromRotationMatrix(basis);
