@@ -9,7 +9,7 @@ No install, no accounts, no build step. It runs straight from GitHub Pages.
 Once GitHub Pages is enabled (see below) the game lives at:
 
 ```
-https://<your-username>.github.io/ramped-up/
+https://jupixels.github.io/rampedup/
 ```
 
 Share `?room=CODE` links to drop friends straight into your session.
