@@ -2,6 +2,7 @@
 // trick poses. Used for the local player and every remote rider.
 import * as THREE from 'three';
 import { lerp, clamp } from './util.js';
+import { decorateBike } from './visualUpgrade.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const UP = V(0, 1, 0);
@@ -313,6 +314,7 @@ export class RiderBike {
     for (const v of Object.values(this.parts)) {
       for (const m of Array.isArray(v) ? v : [v]) this.rider.add(m);
     }
+    decorateBike(this, { rear, fork, bars, rearSpin: this.rearSpin, frontSpin: this.frontSpin, parts: this.parts, seatTop: SEAT_TOP, rearAxle: REAR, frontAxle: FRONT });
     this.root.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
 
     // state
