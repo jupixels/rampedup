@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { getTex, pbr, graffitiTexture, decalTexture } from './textures.js';
 import { TAU } from './util.js';
+import { decorateRamp, decorateLedge } from './visualUpgrade.js';
 
 // ---------- Profiles (s = distance along +z, y = height) ----------
 export class Profile {
@@ -298,6 +299,7 @@ export class Builder {
     const m = this.matrix(x, y, z, yaw, pitch);
     const t = this.add(tg, top, m);
     const s = this.add(sg, side, m);
+    decorateRamp(this, pts, width, m, top);
     if (collide) {
       this.addCollider(t, surface);
       if (sideSlope > 0) this.addCollider(s, surface);
@@ -326,6 +328,7 @@ export class Builder {
       const mc = this.matrix(x, y + h + 0.005, z, yaw);
       this.add(cap, top, mc, { cast: false });
     } else added = this.add(g, mat, m, { cast });
+    decorateLedge(this, { x, z, y, w, h, d, yaw, ledge });
     if (collide) this.addCollider(added, surface);
     if (ledge) {
       // grindable top edges along the long axis
