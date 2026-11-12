@@ -22,6 +22,7 @@ import { Progress } from './progress.js';
 import { PhotoMode } from './photo.js';
 import { Goals } from './goals.js';
 import { BikeGame } from './bike.js';
+import { Replay } from './replay.js';
 import { ZONES, SPAWN } from './layout.js';
 import { store, clamp } from './util.js';
 
@@ -97,6 +98,34 @@ class Game {
 
   saveSettings() { store('settings', this.settings); }
 
+  // Switch graphics quality without reloading: resolution, shadows and post-processing change
+  // straight away. Tree, rock and grass density are built with the world, so those follow on
+  // the next load.
+  setQuality(name) {
+    if (!QUALITY[name]) return;
+    this.settings.quality = name;
+    this.saveSettings();
+    const q = this.q = QUALITY[name], r = this.renderer;
+    this.perf = null; // start resolution scaling afresh
+    r.setPixelRatio(Math.min(window.devicePixelRatio || 1, q.pr));
+    r.setSize(window.innerWidth, window.innerHeight);
+    const sun = this.env.sun;
+    r.shadowMap.enabled = q.shadows > 0;
+    sun.castShadow = q.shadows > 0;
+    sun.shadow.mapSize.set(q.shadows || 1024, q.shadows || 1024);
+    if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; }
+    const S = this.env.shadowRange = q.shadowRange || 70;
+    Object.assign(sun.shadow.camera, { left: -S, right: S, top: S, bottom: -S });
+    sun.shadow.camera.updateProjectionMatrix();
+    if (this.world.grass) this.world.grass.visible = !!q.grass;
+    // rebuild post-processing for the new sample count and effects
+    for (const p of this.composer.passes) p.dispose?.();
+    this.composer.renderTarget1.dispose(); this.composer.renderTarget2.dispose();
+    this.setupComposer();
+    this.fx.setScale(window.innerHeight * r.getPixelRatio());
+    this.scene.traverse((o) => { if (o.material) for (const m of Array.isArray(o.material) ? o.material : [o.material]) m.needsUpdate = true; });
+  }
+
   // push settings into the systems that use them
   applySettings() {
     const s = this.settings;
@@ -109,6 +138,7 @@ class Game {
     if (this.courses.run) this.courses.cancel(true);
     if (this.tutorial.active) this.tutorial.stop();
     if (this.photo.active) this.photo.exit();
+    if (this.replay.active) this.replay.exit();
     this.paused = false;
     this.ui.showPause(false);
     this.playing = false;
@@ -175,6 +205,7 @@ class Game {
     this.progress = new Progress(this);
     this.photo = new PhotoMode(this);
     this.goals = new Goals(this);
+    this.replay = new Replay(this);
     this.applySettings();
     // music starts with the first click or key press (browsers block audio before that)
     const startMusic = () => { if (this.audio.musicVol > 0) this.audio.music.start(); window.removeEventListener('pointerdown', startMusic); window.removeEventListener('keydown', startMusic); };
@@ -461,9 +492,11 @@ class Game {
     if (!this.noAdapt) this.adaptResolution(rawDt);
     const input = this.input.poll();
     const p = this.player;
-    if (!this.playing || this.paused || this.ui.mapOpen || this.photo.active) this.ui.menuNav(input.nav);
+    if (!this.playing || this.paused || this.ui.mapOpen || this.photo.active || this.replay.active) this.ui.menuNav(input.nav);
     this.audio.music.setMuffled(!this.playing || this.paused);
-    if (this.playing && this.photo.active) {
+    if (this.playing && this.replay.active) {
+      this.replay.update(dt, input);
+    } else if (this.playing && this.photo.active) {
       if (input.pausePressed || input.photoPressed) this.photo.exit();
       else this.photo.update(dt, input);
     } else if (this.playing) {
@@ -472,6 +505,7 @@ class Game {
         else this.setPaused(!this.paused);
       }
       if (input.photoPressed && !this.paused && !this.ui.mapOpen) this.photo.enter();
+      if (input.replayPressed && !this.paused && !this.ui.mapOpen && !this.spectating) this.replay.enter();
       if (input.mapPressed) { if (this.ui.mapOpen) this.ui.closeMap(); else if (!this.paused) this.ui.openMap(); }
       if (!this.paused) {
         if (input.camPressed) { this.settings.cam = this.cam.cycle(); this.saveSettings(); this.ui.toast(`Camera: ${this.cam.mode}`); }
@@ -488,6 +522,7 @@ class Game {
         p.update(dt * slow, input);
         this.tricks.update(dt, p);
         this.handlePlayerEvents();
+        this.replay.record(dt);
         this.goals.update(dt);
         this.courses.update(dt);
         this.fx.update(dt, p);

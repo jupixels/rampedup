@@ -24,6 +24,7 @@ export class ChaseCamera {
     this.reduceMotion = false;
     this.dip = 0; this.dipV = 0;
     this.airPull = 0;
+    this._target = new THREE.Vector3(); this._desired = new THREE.Vector3(); // per-frame scratch
   }
 
   cycle() {
@@ -77,7 +78,7 @@ export class ChaseCamera {
       this.dip += this.dipV * h;
     }
     const pitch = 0.22 + this.orbitPitch;
-    const target = new THREE.Vector3(p.x, p.y + lookH, p.z);
+    const target = this._target.set(p.x, p.y + lookH, p.z);
     if (player.mode === 'bail' && player.bail) target.copy(player.bail.riderPos);
     let desired;
     if (this.mode === 'helmet' && player.mode !== 'bail') {
@@ -92,7 +93,7 @@ export class ChaseCamera {
       return;
     }
     {
-      desired = new THREE.Vector3(
+      desired = this._desired.set(
         target.x - Math.sin(yaw) * dist * Math.cos(pitch),
         target.y + height - 1 + Math.sin(pitch) * dist,
         target.z - Math.cos(yaw) * dist * Math.cos(pitch),

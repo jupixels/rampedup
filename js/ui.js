@@ -96,6 +96,7 @@ export class UI {
       case 'restartcourse': g.setPaused(false); g.restartCourse(); break;
       case 'resetbinds': g.input.setBinds(null); g.settings.binds = null; g.saveSettings(); this.renderBinds(); this._hintKey = null; break;
       case 'photo': g.setPaused(false); g.photo.enter(); break;
+      case 'replay': g.setPaused(false); g.replay.enter(); break;
       case 'quitmenu': g.quitToMenu(); break;
       case 'resetprogress': {
         if (b.dataset.armed) {
@@ -353,7 +354,7 @@ export class UI {
       if (el.type === 'checkbox') el.checked = !!get(); else el.value = get();
       el.addEventListener(ev, () => { set(el.type === 'checkbox' ? el.checked : el.type === 'range' ? +el.value : el.value); g.saveSettings(); g.applySettings(); this.applyPrefs(); });
     };
-    bind('quality', () => s.quality, (v) => { s.quality = v; g.saveSettings(); this.toast('Reload the page to apply the new quality'); }, 'change');
+    bind('quality', () => s.quality, (v) => { g.setQuality(v); this.toast('Quality applied. Tree and grass density follow on the next load.'); }, 'change');
     bind('time', () => s.time, (v) => { s.time = v; g.env.setTime(v); }, 'change');
     bind('volume', () => g.audio.volume, (v) => g.audio.setVolume(v));
     bind('music', () => g.audio.musicVol, (v) => g.audio.setMusicVolume(v));
@@ -440,7 +441,7 @@ export class UI {
   menuNav(nav) {
     if (!nav) return;
     const g = this.game;
-    const screens = [this.el.map, document.getElementById('photo'), this.el.pause, this.el.menu, this.el.result];
+    const screens = [this.el.map, document.getElementById('replay'), document.getElementById('photo'), this.el.pause, this.el.menu, this.el.result];
     const scr = screens.find((x) => x && !x.classList.contains('hidden') && x.offsetParent !== null);
     if (!scr) return;
     const items = [...scr.querySelectorAll('button, input, select')].filter((x) => x.offsetParent !== null && !x.disabled);
@@ -462,6 +463,7 @@ export class UI {
     if (nav.ok && cur) { if (cur.type === 'checkbox') { cur.checked = !cur.checked; cur.dispatchEvent(new Event('change', { bubbles: true })); } else cur.click(); }
     if (nav.back) {
       if (this.mapOpen) this.closeMap();
+      else if (g.replay?.active) g.replay.exit();
       else if (g.photo?.active) g.photo.exit();
       else if (this.panelOpen) this.closePanels();
       else if (g.playing && g.paused) g.setPaused(false);

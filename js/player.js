@@ -29,6 +29,10 @@ export const TRICK_ANIMS = {
 export const VARIANT_OF = { barspin: 'xup', tabletop: 'turndown', nohander: 'tucknh', superman: 'seatgrab', nofooter: 'onefooter' };
 
 const tmpV = new THREE.Vector3(), tmpV2 = new THREE.Vector3(), tmpQ = new THREE.Quaternion();
+// scratch objects for updateVisual (runs every frame, so it must not allocate)
+const vBasis = new THREE.Matrix4(), vQ = new THREE.Quaternion(), vQ2 = new THREE.Quaternion(), vWQ = new THREE.Quaternion();
+const AX = new THREE.Vector3(1, 0, 0), AZ = new THREE.Vector3(0, 0, 1);
+const vCentre = new THREE.Vector3(), vOff = new THREE.Vector3(), vRear = new THREE.Vector3(), vWo = new THREE.Vector3();
 const UP = new THREE.Vector3(0, 1, 0);
 
 function envelope(t, dur, hold) {
@@ -765,8 +769,7 @@ export class Player {
     if (f.lengthSq() < 1e-6) f.set(0, 1, 0).addScaledVector(n, -n.y); // facing straight into a vertical wall
     f.normalize();
     const x = tmpV2.crossVectors(n, f).normalize();
-    const basis = new THREE.Matrix4().makeBasis(x, n, f);
-    const q = new THREE.Quaternion().setFromRotationMatrix(basis);
+    const q = vQ.setFromRotationMatrix(vBasis.makeBasis(x, n, f));
     // air pitch: follow trajectory + flips
     let pitch = 0;
     if (this.mode === 'air' && this.air) {
@@ -790,18 +793,18 @@ export class Player {
     const targetLean = this.mode === 'ground' ? clamp(-(this.yawRate || 0) * this.speed / G, -0.6, 0.6) : 0;
     this.lean = damp(this.lean, targetLean, 8, dt);
     const grindLean = this.grind ? this.grind.bal * 0.35 : this.stall ? this.stall.bal * 0.3 : 0;
-    q.multiply(tmpQ.setFromAxisAngle(new THREE.Vector3(0, 0, 1), this.lean + grindLean + (this.tableRoll || 0)));
-    q.multiply(tmpQ.setFromAxisAngle(new THREE.Vector3(1, 0, 0), pitch));
+    q.multiply(tmpQ.setFromAxisAngle(AZ, this.lean + grindLean + (this.tableRoll || 0)));
+    q.multiply(tmpQ.setFromAxisAngle(AX, pitch));
     m.root.quaternion.copy(q);
     // pivot flips around the bike's centre (~0.55m up) and wheelies around the rear contact
-    const centre = new THREE.Vector3(0, 0.55, 0);
-    const off = centre.clone().sub(centre.clone().applyAxisAngle(new THREE.Vector3(1, 0, 0), pitch));
-    m.root.position.copy(this.pos).add(off.applyQuaternion(tmpQ.copy(q).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -pitch))));
+    vCentre.set(0, 0.55, 0);
+    vOff.copy(vCentre).sub(tmpV2.copy(vCentre).applyAxisAngle(AX, pitch));
+    m.root.position.copy(this.pos).add(vOff.applyQuaternion(tmpQ.copy(q).multiply(vQ2.setFromAxisAngle(AX, -pitch))));
     if (this.grind) m.root.position.y += 0.0;
     // wheelie: rotate bike+rider about rear axle contact
-    const wq = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -this.wheelieVis);
-    const rearC = new THREE.Vector3(0, 0, -BIKE.WB / 2);
-    const wo = rearC.clone().sub(rearC.clone().applyQuaternion(wq));
+    const wq = vWQ.setFromAxisAngle(AX, -this.wheelieVis);
+    vRear.set(0, 0, -BIKE.WB / 2);
+    const wo = vWo.copy(vRear).sub(tmpV2.copy(vRear).applyQuaternion(wq));
     m.bike.position.copy(wo); m.bike.quaternion.copy(wq);
     m.rider.position.copy(wo); m.rider.quaternion.copy(wq);
     // wheel & cranks

@@ -40,7 +40,7 @@ jobs:
       - name: Assemble the site (game files only)
         run: |
           mkdir _site
-          cp -r index.html css js sounds vendor LICENSE .nojekyll _site/
+          cp -r index.html css js sounds vendor icons manifest.webmanifest sw.js og.jpg LICENSE .nojekyll _site/
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

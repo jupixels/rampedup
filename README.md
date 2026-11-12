@@ -34,6 +34,8 @@ Share `?room=CODE` links to drop friends straight into your session.
 - **Progression** — XP from combos, courses, sprockets, challenges and the tutorial. Levels unlock paint jobs (raw steel, matte, chrome, gold, oil slick), rims, tyres, bars and helmets, and from level 16 pegs, seats, grips, shoes and gloves.
 - **Music** — a generated lo-fi soundtrack that never quite repeats, muffled while paused.
 - **Photo mode** (P) — freeze the moment, fly the camera, change the light and lens, hide the rider, and save a PNG.
+- **Instant replay** (V) — the last 20 seconds are always recorded. Watch them back with an orbit camera and slow motion, and save the clip as a video file.
+- **Installable** — add it to your home screen or desktop; once loaded it also runs offline.
 - **Settings** — separate music and effects volume, camera distance, field of view, mouse sensitivity, invert, reduce motion, mph, minimap toggle.
 - **Controls** — keyboard, gamepad (standard layout, including menu navigation) and touch. Every key and button can be rebound in Settings, and on-screen prompts follow the device you are using.
 
@@ -59,7 +61,7 @@ Pick **Tutorial** in the main menu for a 16-step guided run (pedal, hop, air, sp
 | Restart course | Backspace | pause menu |
 | Camera · Map | C · M | Right stick click · Left stick click |
 | Chat · Riders | T · Tab | — |
-| Photo mode | P | — |
+| Photo mode · Instant replay | P · V | bind in Settings |
 | Pause | Esc | Start |
 
 Grinding is automatic: land on a rail or ledge roughly lined up with it. Hold W/S/A/D as you lock on to pick the grind (Icepick, Feeble, Smith…), balance with A/D, and hop off with Space.
@@ -119,6 +121,9 @@ js/fx.js            particles and skid marks
 js/progress.js      XP, levels and unlocks
 js/music.js         generative soundtrack
 js/photo.js         photo mode
+js/replay.js        instant replay and clip export
+sw.js               offline cache (service worker)
+manifest.webmanifest, icons/, og.jpg   install metadata and link preview
 js/bikeModel.js     procedural bike + rider with IK and trick poses
 js/tricks.js        trick naming, scoring and combos
 js/courses.js       courses, ghosts, golden sprockets, challenges

@@ -300,3 +300,9 @@ input:focus, select:focus { border-color: var(--accent); }
 #hud-bike b { display: block; font-size: 20px; font-weight: 800; letter-spacing: 0.02em; }
 #hud-bike span { display: block; font-size: 14px; color: var(--muted); margin-top: 2px; white-space: pre; }
 #hud-bike.out { border-color: var(--muted); opacity: 0.8; }
+
+/* instant replay shares the photo-mode bar */
+#replay { position: fixed; inset: auto 0 0 0; z-index: 18; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 0 16px max(16px, env(safe-area-inset-bottom, 0px)); pointer-events: none; }
+#replay input[type=range] { width: min(38vw, 420px); }
+#replay.recording .photo-bar { outline: 2px solid #ff3b3b; }
+#replay .photo-group button span { color: inherit; font-size: inherit; margin: 0; letter-spacing: inherit; text-transform: inherit; }

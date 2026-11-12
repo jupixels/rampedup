@@ -649,4 +649,71 @@ export const CASES = [
       return { ok: isFinite(d) && d < 12, detail: `camera is ${d.toFixed(1)} m from the rider` };
     },
   },
+  // ---------------- phase 6: sharing and polish ----------------
+  {
+    name: 'replay: the last ride plays back on the rider and exiting restores them',
+    run: () => {
+      const g = window.__game, p = g.player, sim = window.__sim, R = g.replay;
+      sim.reset(-60, 30, Math.PI / 2);
+      R.buf.length = 0;
+      for (let i = 0; i < 240; i++) { sim.step(1, { pedal: 1 }); R.record(1 / 60); }
+      const end = p.pos.clone();
+      const entered = R.enter();
+      R.t = R.t0 + 0.2; R.setPlaying(false);
+      R.update(1 / 60, g.input.blank());
+      const back = end.distanceTo(p.model.root.position);       // early in the ride: well behind where we stopped
+      R.setPlaying(true);
+      for (let i = 0; i < 60; i++) R.update(1 / 60, g.input.blank());
+      const moved = Math.abs(R.t - (R.t0 + 0.2) - 1) < 0.05;
+      R.exit();
+      const restored = p.model.root.position.distanceTo(end) < 0.7 && !R.active && !document.getElementById('hud').classList.contains('hidden');
+      return { ok: entered && R.seconds > 3 && back > 8 && moved && restored, detail: `entered=${entered} buffer=${R.seconds.toFixed(1)}s rewound=${back.toFixed(1)}m playhead=${moved} restored=${restored}` };
+    },
+  },
+  {
+    name: 'replay: Save clip produces a video file',
+    run: async () => {
+      const g = window.__game, sim = window.__sim, R = g.replay;
+      if (!R.canSaveClip()) return { ok: true, detail: 'skipped: this browser has no MediaRecorder' };
+      sim.reset(-60, 30, Math.PI / 2);
+      R.buf.length = 0;
+      for (let i = 0; i < 90; i++) { sim.step(1, { pedal: 1 }); R.record(1 / 60); }
+      const realClick = HTMLAnchorElement.prototype.click; let downloaded = '';
+      HTMLAnchorElement.prototype.click = function () { downloaded = this.download; };
+      R.enter(); R.lastClip = null;
+      R.saveClip();
+      const recording = !!R.rec;
+      for (let i = 0; i < 400 && R.rec; i++) { R.update(1 / 30, g.input.blank()); g.composer.render(1 / 30); await new Promise((r) => setTimeout(r, 15)); }
+      for (let i = 0; i < 100 && !R.lastClip; i++) await new Promise((r) => setTimeout(r, 30));
+      HTMLAnchorElement.prototype.click = realClick;
+      const clip = R.lastClip;
+      R.exit();
+      return { ok: recording && !!clip && clip.size > 2000 && /^rampedup-clip-\d+\.(webm|mp4)$/.test(downloaded), detail: clip ? `${clip.type}, ${(clip.size / 1024).toFixed(0)} KB, ${downloaded}` : `no clip (recording started: ${recording})` };
+    },
+  },
+  {
+    name: 'settings: quality switches live without a reload',
+    run: () => {
+      const g = window.__game;
+      const before = g.settings.quality;
+      const errs = [];
+      for (const q of ['medium', 'low']) {
+        try { g.setQuality(q); g.composer.render(0.016); } catch (e) { errs.push(q + ': ' + e.message); }
+      }
+      const size = g.env.sun.shadow.mapSize.x;
+      g.setQuality(before); g.composer.render(0.016);
+      return { ok: !errs.length && size === 1024 && g.settings.quality === before, detail: errs.join('; ') || `shadow map ${size}px at Low, back to ${before}` };
+    },
+  },
+  {
+    name: 'app: manifest, icons, service worker and link preview are present and valid',
+    run: async () => {
+      const m = await fetch('manifest.webmanifest').then((r) => r.json());
+      const missing = [];
+      for (const i of m.icons) { const r = await fetch(i.src); if (!r.ok) missing.push(i.src); }
+      for (const f of ['sw.js', 'og.jpg']) { const r = await fetch(f); if (!r.ok) missing.push(f); }
+      const linked = !!document.querySelector('link[rel=manifest]') && !!document.querySelector('meta[property="og:image"]');
+      return { ok: !missing.length && linked && m.display === 'fullscreen' && m.icons.length >= 3, detail: missing.length ? 'missing: ' + missing.join(', ') : `${m.icons.length} icons, display=${m.display}` };
+    },
+  },
 ];
