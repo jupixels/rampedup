@@ -45,7 +45,7 @@ export class ChaseCamera {
     const p = player.pos;
     const sp = player.speed;
     // which way to look: in the air follow the direction of travel, so spins don't spin the camera
-    let targetYaw = player.heading;
+    let targetYaw = player.fakie ? player.heading + Math.PI : player.heading;
     if (player.mode === 'air' && sp > 1.5) {
       targetYaw = Math.atan2(player.vel.x, player.vel.z);
       if (player.air && player.air.vert) targetYaw = this.yaw; // hold on vert airs

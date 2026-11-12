@@ -82,6 +82,7 @@ class Game {
       colors: { frame: '#ff5a1f', helmet: '#f2f2f2', shirt: '#1d2b3a', pants: '#2a2a2a' },
       quality: null, time: 'golden', fps: false, hints: true, cam: 'chase',
       camDist: 1, fov: 60, sens: 1, invert: false, reduceMotion: false, mph: false, minimap: true,
+      classic: false, binds: null,
     }, store('settings') || {});
     this.touch = matchMedia('(pointer: coarse)').matches && !matchMedia('(pointer: fine)').matches;
     if (!this.settings.quality) this.settings.quality = this.touch ? 'low' : 'medium';
@@ -99,6 +100,7 @@ class Game {
     const s = this.settings;
     if (this.cam) { this.cam.distScale = s.camDist || 1; this.cam.baseFov = s.fov || 60; this.cam.reduceMotion = !!s.reduceMotion; }
     if (this.input) { this.input.sens = s.sens || 1; this.input.invert = !!s.invert; }
+    if (this.player) this.player.classic = !!s.classic;
   }
 
   quitToMenu() {
@@ -153,6 +155,8 @@ class Game {
     const T0 = performance.now(), dbg = (l) => location.search.includes('debug') && console.log('[load]', l, Math.round(performance.now() - T0));
     this.tricks = new Tricks(this);
     this.input = new Input();
+    this.input.isTouch = this.touch;
+    this.input.setBinds(this.settings.binds);
     this.player = new Player(this, this.settings.colors);
     dbg('player');
     this.player.spawn(SPAWN.x, SPAWN.z, SPAWN.yaw);
@@ -237,10 +241,15 @@ class Game {
     this.ui.showTouch(true);
     this.cam.snap(this.player);
     this.clock.getDelta();
+    if (this.touch) {
+      // phones: go fullscreen and landscape where the browser allows it
+      try { document.documentElement.requestFullscreen?.({ navigationUI: 'hide' })?.then(() => screen.orientation?.lock?.('landscape')?.catch(() => {}))?.catch(() => {}); } catch (e) {}
+    }
     if (!store('seenHelp')) {
       store('seenHelp', true);
-      if (!this.tutorial.active && !store('tutorialDone')) setTimeout(() => this.ui.toast('New here? Press Esc and pick Tutorial'), 800);
-      setTimeout(() => this.ui.toast('W pedal · Space hop · J/K/L tricks'), 4500);
+      const L = (a) => this.input.label(a);
+      if (!this.tutorial.active && !store('tutorialDone')) setTimeout(() => this.ui.toast(this.touch ? 'New here? Tap II and pick Tutorial' : `New here? Press ${L('pause')} and pick Tutorial`), 800);
+      setTimeout(() => this.ui.toast(this.touch ? 'Stick to ride · HOP to jump · tap a trick in the air' : `${L('pedal')} pedal · ${L('hop')} hop · ${L('barspin')} / ${L('tailwhip')} / ${L('superman')} tricks`), 4500);
     }
   }
 
@@ -269,12 +278,19 @@ class Game {
     this.ui.toast(`Race: ${c.name} — get ready!`);
   }
 
-  // R / Back: restart a solo course, otherwise hop back to the last safe spot.
-  // In a multiplayer race the clock is shared, so we only put you back at the last gate.
+  // R / Back: hop back to the last safe spot. During a gate course that is the last gate you
+  // passed (the clock keeps running).
   resetRider() {
     const r = this.courses.run;
+    if (r && r.state !== 'running') return;
+    this.player.respawnSafe();
+    this.cam.snap(this.player);
+  }
+
+  // Backspace / pause menu: start a solo course over. A multiplayer race can't be restarted.
+  restartCourse() {
+    const r = this.courses.run;
     if (r && r.state === 'running' && !r.opts.race) this.courses.start(r.course, {});
-    else if (!r || r.state === 'running') { this.player.respawnSafe(); this.cam.snap(this.player); }
   }
 
   zoneName() {
@@ -297,9 +313,9 @@ class Game {
     const c = this.courses.nearbyStart(this.player);
     if (c) {
       const best = this.courses.best[c.id];
-      return `<kbd>E</kbd> Start ${c.name}${best ? ` <span class="muted">· best ${c.type === 'score' ? best.toLocaleString() : (Math.floor(best / 60) + ':' + (best % 60).toFixed(2).padStart(5, '0'))}</span>` : ''}`;
+      return `<kbd>${this.input.label('interact')}</kbd> Start ${c.name}${best ? ` <span class="muted">· best ${c.type === 'score' ? best.toLocaleString() : (Math.floor(best / 60) + ':' + (best % 60).toFixed(2).padStart(5, '0'))}</span>` : ''}`;
     }
-    if (this.nearLift()) return '<kbd>E</kbd> Take the lift to the top of the mega ramp';
+    if (this.nearLift()) return `<kbd>${this.input.label('interact')}</kbd> Take the lift to the top of the mega ramp`;
     return null;
   }
 
@@ -421,6 +437,7 @@ class Game {
         if (input.camPressed) { this.settings.cam = this.cam.cycle(); this.saveSettings(); this.ui.toast(`Camera: ${this.cam.mode}`); }
         if (input.chatPressed) this.ui.openChat();
         if (input.resetPressed && p.mode !== 'bail') this.resetRider();
+        if (input.restartPressed) this.restartCourse();
         if (input.interactPressed) {
           const c = this.courses.nearbyStart(p);
           if (c) this.courses.start(c);

@@ -97,7 +97,7 @@ export class Tutorial {
       },
       {
         title: 'Flip it',
-        text: () => `Drop in on the mega ramp. In the air, hold ${K(kbd('S'), 'the left stick down', 'the stick down')} to backflip and let go once you're coming upright.`,
+        text: () => `Drop in on the mega ramp. In the air, let go of everything, then hold ${K(kbd('S'), 'the left stick down', 'the stick down')} to backflip. Let go once you're coming upright.`,
         setup: () => { const d = g.world.anchors.megaDeck; g.teleport(d.x, d.z, 0, true); },
         onTrick: { land: (s, e) => { if (e.flips <= -1) s.done = true; } },
         optional: true,
