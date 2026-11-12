@@ -108,6 +108,46 @@ export function formatTime(s) {
   return `${m}:${sec < 10 ? '0' : ''}${sec.toFixed(2)}`;
 }
 
+// --- untrusted input (anything that arrives from another player) ---
+const HEX = /^#[0-9a-f]{6}$/i;
+export const safeColor = (c, fallback = '#888888') => (typeof c === 'string' && HEX.test(c) ? c.toLowerCase() : fallback);
+export function safeName(n, fallback = 'Rider') {
+  if (typeof n !== 'string') return fallback;
+  const s = n.replace(/[\u0000-\u001f\u007f<>]/g, '').trim().slice(0, 16);
+  return s || fallback;
+}
+export const safeText = (t, max = 120) => (typeof t === 'string' ? t.replace(/[\u0000-\u001f\u007f]/g, ' ').slice(0, max) : '');
+const FINISHES = ['raw', 'matte', 'metal', 'chrome', 'gold', 'oilslick'];
+export function safeColors(c) {
+  c = c && typeof c === 'object' ? c : {};
+  const out = {
+    frame: safeColor(c.frame, '#ff5a1f'), helmet: safeColor(c.helmet, '#f2f2f2'),
+    shirt: safeColor(c.shirt, '#1d2b3a'), pants: safeColor(c.pants, '#2a2a2a'),
+  };
+  for (const k of ['rims', 'tires', 'bars']) if (c[k] != null) out[k] = safeColor(c[k], undefined);
+  for (const k of ['frame', 'helmet', 'rims', 'tires', 'bars', 'shirt', 'pants']) {
+    const f = c[k + 'Finish'];
+    if (typeof f === 'string' && FINISHES.includes(f)) out[k + 'Finish'] = f;
+  }
+  for (const k of Object.keys(out)) if (out[k] === undefined) delete out[k];
+  return out;
+}
+export const safeNumber = (v, lo, hi, fallback = 0) => (typeof v === 'number' && isFinite(v) ? Math.min(hi, Math.max(lo, v)) : fallback);
+
+// Free the GPU resources of a throw-away object tree (gates, ghosts, remote riders).
+// `keep` lists geometries/materials that are shared and must survive.
+export function disposeTree(root, keep = null) {
+  root.traverse((o) => {
+    if (o.geometry && !(keep && keep.has(o.geometry))) o.geometry.dispose();
+    const mats = Array.isArray(o.material) ? o.material : o.material ? [o.material] : [];
+    for (const m of mats) {
+      if (keep && keep.has(m)) continue;
+      if (m.map && !(keep && keep.has(m.map))) m.map.dispose();
+      m.dispose();
+    }
+  });
+}
+
 export function store(key, val) {
   try {
     if (val === undefined) return JSON.parse(localStorage.getItem('rampedup.' + key));

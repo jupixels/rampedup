@@ -99,6 +99,8 @@ export class Player {
     // hop preload
     if (input.hop && this.mode !== 'air') this.preload = Math.min(1, this.preload + dt / 0.28);
     const released = input.hopReleased;
+    // the key went up without us seeing it (lost focus, pause): drop the stored hop
+    if (!input.hop && !released && this.mode !== 'air') this.preload = 0;
     // trick input (air only)
     if (this.mode === 'air') this.handleTrickInput(input);
     const steps = Math.max(1, Math.ceil(dt / SUB));
@@ -168,7 +170,8 @@ export class Player {
       this.heading = wrapAngle(this.heading + Math.PI);
       vf = -vf;
       this.emit('revert');
-      this.game.tricks.addTrick('Revert', 120);
+      // a revert links a combo that is already running; on its own it is worth nothing
+      if (this.game.tricks.combo) this.game.tricks.addTrick('Revert', 120, false);
       const f2 = this.forward(tmpV);
       f.copy(f2.addScaledVector(n, -f2.dot(n)).normalize());
       lat.crossVectors(n, f).normalize();

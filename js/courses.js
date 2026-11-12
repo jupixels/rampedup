@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { ZONES } from './layout.js';
 import { RiderBike } from './bikeModel.js';
-import { store, formatTime, rng } from './util.js';
+import { store, formatTime, disposeTree } from './util.js';
 
 function label(text, sub = '', color = '#ff5a1f') {
   const c = document.createElement('canvas');
@@ -98,7 +98,7 @@ export const CHALLENGES = [
   { id: 'whip', name: 'Whip It', desc: 'Land a tailwhip', test: (e) => e.type === 'land' && e.air.tricks.some((t) => t.type === 'tailwhip') },
   { id: 'dbar', name: 'Double Trouble', desc: 'Land a double barspin', test: (e) => e.type === 'land' && e.air.tricks.filter((t) => t.type === 'barspin').length >= 2 },
   { id: 'grind30', name: 'Rail Rat', desc: 'Grind 30 m in total', test: (e, st) => st.grindDist >= 30 },
-  { id: 'manual5', name: 'Wheelie King', desc: 'Hold a 5 second manual', test: (e, st, g) => g.player.manual && g.player.manual.time >= 5 },
+  { id: 'manual5', name: 'Wheelie King', desc: 'Hold a 5 second manual', test: (e, st) => st.maxManual >= 5 },
   { id: 'combo5k', name: 'Combo Starter', desc: 'Bank a 5,000 point combo', test: (e) => e.type === 'bank' && e.score >= 5000 },
   { id: 'combo25k', name: 'Combo Master', desc: 'Bank a 25,000 point combo', test: (e) => e.type === 'bank' && e.score >= 25000 },
   { id: 'air3', name: 'Mega Send', desc: 'Get 3 seconds of airtime', test: (e, st) => st.maxAir >= 3 },
@@ -180,6 +180,7 @@ export class Courses {
     const m = this.markers.find((x) => x.course === c);
     if (!m) return;
     m.grp.remove(m.lab);
+    disposeTree(m.lab);
     const best = this.best[c.id];
     const sub = c.type === 'score' ? `${c.diff} · ${c.duration}s${best ? ' · best ' + best.toLocaleString() : ''}` : `${c.diff}${best ? ' · best ' + formatTime(best) : ''}`;
     m.lab = label(c.name, sub, ZONES[c.zone].color);
@@ -315,7 +316,7 @@ export class Courses {
   }
 
   removeGhost() {
-    if (this.ghost) { this.game.scene.remove(this.ghost.model.root); this.ghost = null; }
+    if (this.ghost) { this.game.scene.remove(this.ghost.model.root); this.ghost.model.dispose(); this.ghost = null; }
   }
 
   updateGateVisibility() {
@@ -328,9 +329,14 @@ export class Courses {
     });
   }
 
+  clearGates(run) {
+    for (const m of run.gates) { this.group.remove(m); disposeTree(m); }
+    run.gates.length = 0;
+  }
+
   cancel(silent = false) {
     if (!this.run) return;
-    for (const m of this.run.gates) this.group.remove(m);
+    this.clearGates(this.run);
     const was = this.run;
     this.run = null;
     this.game.player.frozen = false;
@@ -368,6 +374,8 @@ export class Courses {
         this.checkChallenges({ type: 'sprocket' });
       }
     }
+    this.chT = (this.chT || 0) + dt;
+    if (this.chT > 0.5) { this.chT = 0; this.checkChallenges({ type: 'tick' }); }
     const r = this.run;
     if (!r) return;
     if (r.state === 'countdown') {
@@ -457,7 +465,7 @@ export class Courses {
     if (isBest) { this.best[c.id] = result; store('best', this.best); }
     this.medals[c.id] = Math.max(this.medals[c.id] || 0, medal);
     store('medals', this.medals);
-    for (const m of r.gates) this.group.remove(m);
+    this.clearGates(r);
     this.run = null;
     this.removeGhost();
     g.player.frozen = false;

@@ -109,7 +109,7 @@ export class Tutorial {
       },
       {
         title: 'You’re ready',
-        text: () => `Ride into a glowing ring and press ${K(kbd('E'), 'D-pad ←', 'E')} to start a course. Hunt for golden sprockets, and press ${K(kbd('Esc'), 'Start', 'II')} for challenges, the guide and multiplayer.`,
+        text: () => `Ride into a glowing ring and press ${K(kbd('E'), 'D-pad →', 'E')} to start a course. Hunt for golden sprockets, and press ${K(kbd('Esc'), 'Start', 'II')} for challenges, the guide and multiplayer.`,
         final: true,
       },
     ];

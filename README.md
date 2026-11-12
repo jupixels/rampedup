@@ -51,11 +51,12 @@ Pick **Tutorial** in the main menu for a 14-step guided run (pedal, hop, air, sp
 | Bunny hop (hold, release) | Space | A |
 | Manual (balance with W/S) | Shift | LB |
 | Barspin · Tailwhip | J · K | X · Y |
-| Superman · No Hander · Can Can | L · U · I | B · LB · RB |
+| Superman · No Hander · Can Can | L · U · I | B · RB · D-pad ← |
 | Table Top · No Footer | O · H | D-pad ↓ · ↑ |
-| Start course / take lift | E | D-pad ← / → |
+| Start course / take lift | E | D-pad → |
 | Reset to last safe spot | R | Back |
-| Camera · Map · Chat · Riders | C · M · T · Tab | Stick click |
+| Camera · Map | C · M | Right stick click · Left stick click |
+| Chat · Riders | T · Tab | — |
 | Photo mode | P | — |
 | Pause | Esc | Start |
 
@@ -70,6 +71,18 @@ The repo includes a workflow at `.github/workflows/pages.yml` that publishes the
 3. Push (or re-run the workflow). The URL appears in the workflow summary.
 
 Alternatively choose **Deploy from a branch → `main` / root** — the game is plain static files, so that works too.
+
+## Tests
+
+Scripted test rides load the real game in headless Chromium and drive the physics with synthetic input:
+
+```bash
+npm install
+npx playwright install chromium   # first time only
+npm test                          # or: npm test -- manual gamepad
+```
+
+They run on every pull request, and a push to `main` only deploys if they pass. Add a case to `tests/cases.mjs` for each bug you fix.
 
 ## Run locally
 

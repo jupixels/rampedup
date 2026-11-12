@@ -346,8 +346,20 @@ export class RiderBike {
     }
   }
 
+  // Free this model's GPU resources (remote riders and ghosts come and go).
+  dispose() {
+    if (this.nameTag) this.nameTag.material.map.dispose();
+    const seen = new Set();
+    const drop = (m) => { if (m && !seen.has(m)) { seen.add(m); m.dispose(); } };
+    this.root.traverse((o) => {
+      if (o.geometry) o.geometry.dispose();
+      if (Array.isArray(o.material)) o.material.forEach(drop); else drop(o.material);
+    });
+    Object.values(this.mats).forEach(drop);
+  }
+
   setNameTag(text, color = '#ffffff') {
-    if (this.nameTag) { this.root.remove(this.nameTag); this.nameTag.material.map.dispose(); }
+    if (this.nameTag) { this.root.remove(this.nameTag); this.nameTag.material.map.dispose(); this.nameTag.material.dispose(); }
     const c = document.createElement('canvas');
     c.width = 512; c.height = 96;
     const g = c.getContext('2d');
