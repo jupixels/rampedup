@@ -176,6 +176,7 @@ export class Goals {
 
   award(gap) {
     const g = this.game;
+    if (g.modded) return;
     const first = !this.foundGaps.has(gap.id);
     g.tricks.addTrick(`${gap.name} Gap`, first ? 500 : 200, false);
     this.bump('gaps', 1);
@@ -192,6 +193,7 @@ export class Goals {
   // ---------- events ----------
   onEvent(e) {
     const g = this.game;
+    if (g.modded) return;
     if (e.type === 'land' && e.air && e.air.gapsHit) for (const id of e.air.gapsHit) { const gap = this.gaps.find((x) => x.id === id); if (gap && !gap.instant) this.award(gap); }
     this.trackDaily(e);
     // a gap knows which spot it belongs to, even where it sticks out past the spot's edge (the pier)

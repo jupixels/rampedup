@@ -36,6 +36,8 @@ Share `?room=CODE` links to drop friends straight into your session.
 - **Photo mode** (P) — freeze the moment, fly the camera, change the light and lens, hide the rider, and save a PNG.
 - **Instant replay** (V) — the last 20 seconds are always recorded. Watch them back with an orbit camera and slow motion, and save the clip as a video file.
 - **Installable** — add it to your home screen or desktop; once loaded it also runs offline.
+- **Modded mode** — retune the bike in Settings: top speed, acceleration, jump power, gravity, spin and flip speed, easy balance and no-crash landings. Records are paused while it is on.
+- **Split times** — every gate shows how far ahead of or behind your best run you are.
 - **Settings** — separate music and effects volume, camera distance, field of view, mouse sensitivity, invert, reduce motion, mph, minimap toggle.
 - **Controls** — keyboard, gamepad (standard layout, including menu navigation) and touch. Every key and button can be rebound in Settings, and on-screen prompts follow the device you are using.
 
@@ -57,8 +59,8 @@ Pick **Tutorial** in the main menu for a 16-step guided run (pedal, hop, air, sp
 | Superman · No Hander · Can Can | L · U · I | B · RB · D-pad ← |
 | Table Top · No Footer | O · H | D-pad ↓ · ↑ |
 | Start course / take lift | E | D-pad → |
-| Back to last gate / safe spot | R | Back |
-| Restart course | Backspace | pause menu |
+| Restart course (free riding: back to a safe spot) | R | Back |
+| Back to the last gate | Backspace | bind in Settings |
 | Camera · Map | C · M | Right stick click · Left stick click |
 | Chat · Riders | T · Tab | — |
 | Photo mode · Instant replay | P · V | bind in Settings |

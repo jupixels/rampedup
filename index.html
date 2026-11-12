@@ -149,6 +149,7 @@
           <option value="ultra">Ultra: big GPUs</option>
         </select>
       </label>
+      <label class="check"><input type="checkbox" data-bind="autoq" id="set-autoq"> Lower graphics automatically when the game runs slowly</label>
       <label class="field">Time of day
         <select data-bind="time" id="set-time">
           <option value="golden">Golden hour</option>
@@ -169,6 +170,18 @@
       <label class="field">Mouse look sensitivity <input type="range" min="0.3" max="2.5" step="0.1" data-bind="sens" id="set-sens"></label>
       <label class="check"><input type="checkbox" data-bind="invert" id="set-invert"> Invert camera up/down</label>
       <label class="check"><input type="checkbox" data-bind="classic" id="set-classic"> Classic controls (flips and manuals react to keys you are already holding, no fakie riding)</label>
+      <h3>Modded mode</h3>
+      <label class="check"><input type="checkbox" data-bind="modon" id="set-modon"> Modded mode: retune the bike and the physics</label>
+      <label class="field">Top speed <span class="muted" data-bind="modspeedv"></span><input type="range" min="0.5" max="4" step="0.1" data-bind="modspeed" id="set-modspeed"></label>
+      <label class="field">Acceleration <span class="muted" data-bind="modaccelv"></span><input type="range" min="0.5" max="4" step="0.1" data-bind="modaccel" id="set-modaccel"></label>
+      <label class="field">Jump power <span class="muted" data-bind="modjumpv"></span><input type="range" min="0.5" max="4" step="0.1" data-bind="modjump" id="set-modjump"></label>
+      <label class="field">Gravity <span class="muted" data-bind="modgravityv"></span><input type="range" min="0.2" max="2.5" step="0.1" data-bind="modgravity" id="set-modgravity"></label>
+      <label class="field">Spin speed <span class="muted" data-bind="modspinv"></span><input type="range" min="0.5" max="3" step="0.1" data-bind="modspin" id="set-modspin"></label>
+      <label class="field">Flip speed <span class="muted" data-bind="modflipv"></span><input type="range" min="0.5" max="3" step="0.1" data-bind="modflip" id="set-modflip"></label>
+      <label class="check"><input type="checkbox" data-bind="modbalance" id="set-modbalance"> Easy balance on grinds, manuals and lip tricks</label>
+      <label class="check"><input type="checkbox" data-bind="modnobail" id="set-modnobail"> No crashes: every landing sticks and walls just bounce you (water still gets you)</label>
+      <div class="row"><button class="btn small ghost" data-action="modreset"><span>Reset to stock</span></button></div>
+      <p class="muted small">While modded mode is on, course times, medals, goals, gaps, challenges and XP are not recorded, and your race results are not sent to other riders.</p>
       <h3>Key and button bindings</h3>
       <p class="muted small">Click a binding, then press the new key or gamepad button. Esc cancels.</p>
       <div class="bind-list" data-bind="binds"></div>
@@ -202,7 +215,7 @@
         <div><kbd>J</kbd> barspin · <kbd>K</kbd> tailwhip</div><div>X · Y</div>
         <div><kbd>L</kbd> superman · <kbd>U</kbd> no hander · <kbd>I</kbd> can can</div><div>B · RB · D-pad ←</div>
         <div><kbd>O</kbd> table top · <kbd>H</kbd> no footer</div><div>D-pad ↓ ↑</div>
-        <div><kbd>E</kbd> start course / take lift · <kbd>R</kbd> last gate or safe spot · <kbd>Backspace</kbd> restart course</div><div>D-pad → · Back · pause menu</div>
+        <div><kbd>E</kbd> start course / take lift · <kbd>R</kbd> restart course (or back to a safe spot when free riding) · <kbd>Backspace</kbd> back to the last gate</div><div>D-pad → · Back</div>
         <div><kbd>C</kbd> camera · <kbd>M</kbd> map · <kbd>P</kbd> photo mode · <kbd>T</kbd> chat · <kbd>Tab</kbd> riders</div><div>R3 camera · L3 map</div>
         <div>Drag the mouse to look around</div><div>Right stick</div>
       </div>
@@ -284,6 +297,7 @@
     <div class="hud-tl">
       <div class="zone" id="hud-zone">The Yard</div>
       <div class="goal" id="hud-goal"></div>
+      <div class="modded hidden" id="hud-modded">Modded</div>
       <div class="bike hidden" id="hud-bike"><b></b><span></span></div>
       <div class="speed"><b id="hud-speed">0</b><small>km/h</small></div>
       <div class="score">Score <b id="hud-score">0</b></div>
@@ -293,6 +307,7 @@
       <div class="course-name" id="hud-cname"></div>
       <div class="course-time" id="hud-ctime"></div>
       <div class="course-sub" id="hud-csub"></div>
+      <div class="course-split" id="hud-split"></div>
     </div>
     <div class="hud-compass" id="hud-compass"><i></i></div>
     <div class="combo" id="hud-combo">

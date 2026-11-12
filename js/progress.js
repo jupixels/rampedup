@@ -68,7 +68,7 @@ export class Progress {
 
   add(amount, reason = '') {
     amount = Math.round(amount);
-    if (amount <= 0) return;
+    if (amount <= 0 || this.game.modded) return;
     this.xp += amount;
     store('xp', this.xp);
     const nl = this.levelFor(this.xp);

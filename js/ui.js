@@ -369,7 +369,28 @@ export class UI {
     bind('minimap', () => s.minimap !== false, (v) => { s.minimap = v; }, 'change');
     bind('hints', () => s.hints !== false, (v) => { s.hints = v; }, 'change');
     bind('fps', () => s.fps, (v) => { s.fps = v; }, 'change');
+    bind('autoq', () => s.autoQuality !== false, (v) => { s.autoQuality = v; }, 'change');
     bind('classic', () => s.classic, (v) => { s.classic = v; }, 'change');
+    // modded mode: every slider is a multiplier on the stock bike
+    s.mod = Object.assign({ on: false, speed: 1.5, accel: 1.5, jump: 1.5, gravity: 1, spin: 1, flip: 1, balance: false, nobail: false }, s.mod || {});
+    const modLabel = () => {
+      const x = (k) => `${(+s.mod[k]).toFixed(1)}×`;
+      p.querySelector('[data-bind=modspeedv]').textContent = `${x('speed')} · ${Math.round(45 * s.mod.speed)} km/h`;
+      for (const k of ['accel', 'jump', 'gravity', 'spin', 'flip']) p.querySelector(`[data-bind=mod${k}v]`).textContent = x(k);
+    };
+    bind('modon', () => s.mod.on, (v) => { s.mod.on = v; if (v) this.toast('Modded mode on: times, medals, goals and XP are paused'); }, 'change');
+    for (const k of ['speed', 'accel', 'jump', 'gravity', 'spin', 'flip']) bind('mod' + k, () => s.mod[k], (v) => { s.mod[k] = v; modLabel(); });
+    bind('modbalance', () => s.mod.balance, (v) => { s.mod.balance = v; }, 'change');
+    bind('modnobail', () => s.mod.nobail, (v) => { s.mod.nobail = v; }, 'change');
+    p.querySelector('[data-action=modreset]').addEventListener('click', (e) => {
+      e.stopPropagation(); this.click();
+      Object.assign(s.mod, { speed: 1, accel: 1, jump: 1, gravity: 1, spin: 1, flip: 1, balance: false, nobail: false });
+      this.game.saveSettings(); this.game.applySettings();
+      for (const k of ['speed', 'accel', 'jump', 'gravity', 'spin', 'flip']) p.querySelector(`[data-bind=mod${k}]`).value = 1;
+      p.querySelector('[data-bind=modbalance]').checked = false; p.querySelector('[data-bind=modnobail]').checked = false;
+      modLabel();
+    });
+    modLabel();
     this.renderBinds();
   }
 
@@ -657,7 +678,7 @@ export class UI {
         this._hintKey = hk;
         const items = [[L('pedal'), 'pedal'], [L('hop'), 'hop'], [['barspin', 'tailwhip', 'superman'].map(L).join(' '), 'tricks'], [L('manual'), 'manual']];
         if (p.fakie) items.unshift([L('brake'), 'revert']);
-        if (g.courses.run) items.push([L('reset'), 'last gate']); else items.push([L('interact'), 'course']);
+        if (g.courses.run) items.push([L('reset'), g.courses.run.opts.race ? 'last gate' : 'restart'], [L('restart'), 'last gate']); else items.push([L('interact'), 'course']);
         items.push([L('map'), 'map'], [L('pause'), 'menu']);
         el.hints.textContent = '';
         for (const [k, t] of items) { if (!k) continue; const sp = document.createElement('span'); const kb = document.createElement('kbd'); kb.textContent = k; sp.append(kb, ' ' + t); el.hints.appendChild(sp); }
@@ -674,7 +695,7 @@ export class UI {
     const pr = g.promptText();
     cls(el.prompt, 'hidden', !pr);
     if (pr) set(el.prompt, pr, true);
-    if (this.frame % 3 === 0 && g.settings.minimap !== false) this.drawMinimap();
+    if (this.frame % 5 === 0 && g.settings.minimap !== false) this.drawMinimap();
     // scoreboard
     const showSB = g.input.state.scoreHeld;
     cls(el.scoreboard, 'hidden', !showSB);
@@ -746,6 +767,15 @@ export class UI {
     }
   }
 
+  // split at a gate: the time, and how far ahead (green) or behind (red) your best run you are
+  splitPop(time, delta) {
+    const el = this.splitEl || (this.splitEl = document.getElementById('hud-split'));
+    el.textContent = delta === null ? formatTime(time) : `${delta <= 0 ? '−' : '+'}${Math.abs(delta).toFixed(2)}`;
+    el.classList.toggle('ahead', delta !== null && delta <= 0);
+    el.classList.toggle('behind', delta !== null && delta > 0);
+    el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
+  }
+
   bankPop(text, lost = false) {
     const b = this.el.bank;
     b.textContent = text;
@@ -758,11 +788,12 @@ export class UI {
   courseEnd(res) {
     const el = this.el.result;
     if (!res) { el.classList.add('hidden'); return; }
-    const { course, result, medal, isBest, race } = res;
+    const { course, result, medal, isBest, race, modded } = res;
     const val = course.type === 'score' ? result.toLocaleString() : formatTime(result);
     el.innerHTML = `<h3>${esc(course.name)}</h3><div class="big">${val}</div>
-      ${medal ? `<div class="medal" style="background:${MEDAL_C[medal]}">${MEDAL[medal]}</div>` : `<div class="muted">Next medal: ${course.type === 'score' ? course.par[0].toLocaleString() : formatTime(course.par[0])}</div>`}
+      ${modded ? '' : medal ? `<div class="medal" style="background:${MEDAL_C[medal]}">${MEDAL[medal]}</div>` : `<div class="muted">Next medal: ${course.type === 'score' ? course.par[0].toLocaleString() : formatTime(course.par[0])}</div>`}
       ${isBest ? '<div style="color:#57e08a;font-weight:800;text-transform:uppercase;letter-spacing:.08em">New personal best</div>' : ''}
+      ${modded ? '<div class="muted">Modded run: not recorded</div>' : ''}
       ${race ? '<div class="muted">Waiting for other riders…</div><div data-bind="race"></div>' : ''}
       <div class="row"><button class="btn primary" id="res-again"><span>Again</span></button><button class="btn ghost" id="res-close"><span>Ride on</span></button></div>`;
     el.classList.remove('hidden');

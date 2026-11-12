@@ -8,7 +8,7 @@ import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { buildWorld, Environment, lampGlows } from './world.js';
 import { setAnisotropy } from './textures.js';
-import { Player } from './player.js';
+import { Player, G } from './player.js';
 import { Tricks } from './tricks.js';
 import { Input } from './input.js';
 import { ChaseCamera } from './camera.js';
@@ -27,8 +27,8 @@ import { ZONES, SPAWN } from './layout.js';
 import { store, clamp } from './util.js';
 
 const QUALITY = {
-  low:    { pr: 1,    shadows: 1024, shadowRange: 45, trees: 900,  rocks: 160, grass: false, msaa: 0, bloom: false, gtao: false },
-  medium: { pr: 1,    shadows: 2048, shadowRange: 55, trees: 1600, rocks: 260, grass: true, grassSpacing: 0.32, grassRadius: 24, msaa: 2, bloom: true, gtao: false },
+  low:    { pr: 1,    shadows: 1024, shadowRange: 40, trees: 900,  rocks: 160, grass: false, msaa: 0, bloom: false, gtao: false, shadowEvery: 2, treeShadows: false },
+  medium: { pr: 1,    shadows: 2048, shadowRange: 50, trees: 1600, rocks: 260, grass: true, grassSpacing: 0.36, grassRadius: 20, msaa: 2, bloom: true, gtao: false, shadowEvery: 2 },
   high:   { pr: 1.5,  shadows: 2048, shadowRange: 65, trees: 2400, rocks: 380, grass: true, grassSpacing: 0.25, grassRadius: 30, msaa: 4, bloom: true, gtao: false },
   ultra:  { pr: 2,    shadows: 4096, shadowRange: 85, trees: 3600, rocks: 600, grass: true, grassSpacing: 0.17, grassRadius: 42, msaa: 4, bloom: true, gtao: true },
 };
@@ -87,10 +87,12 @@ class Game {
       colors: { frame: '#ff5a1f', helmet: '#f2f2f2', shirt: '#2f6fd6', pants: '#262a31' },
       quality: null, time: 'golden', fps: false, hints: true, cam: 'chase',
       camDist: 1, fov: 60, sens: 1, invert: false, reduceMotion: false, mph: false, minimap: true,
-      classic: false, binds: null,
+      classic: false, binds: null, autoQuality: true,
+      mod: { on: false, speed: 1.5, accel: 1.5, jump: 1.5, gravity: 1, spin: 1, flip: 1, balance: false, nobail: false },
     }, store('settings') || {});
     this.touch = matchMedia('(pointer: coarse)').matches && !matchMedia('(pointer: fine)').matches;
-    if (!this.settings.quality) this.settings.quality = this.touch ? 'low' : 'medium';
+    // quality the player picked by hand is kept; otherwise it is chosen for the machine (see init)
+    if (!this.settings.quality || !QUALITY[this.settings.quality]) { this.settings.quality = this.touch ? 'low' : 'medium'; this.settings.qualityChosen = false; }
     this.q = QUALITY[this.settings.quality] || QUALITY.high;
     this.playing = false;
     this.paused = false;
@@ -100,12 +102,24 @@ class Game {
 
   saveSettings() { store('settings', this.settings); }
 
+  // Shadows are the most expensive pass on laptop graphics. On Low and Medium the shadow map is
+  // redrawn every other frame (the rider's shadow trails by one frame, which nobody can see), and
+  // on Low the trees, which are most of its triangles, stop casting.
+  applyShadowBudget() {
+    const q = this.q;
+    this.shadowEvery = q.shadowEvery || 1;
+    this.renderer.shadowMap.autoUpdate = this.shadowEvery === 1;
+    const cast = q.shadows > 0 && q.treeShadows !== false;
+    for (const m of this.world.treeMeshes || []) m.castShadow = cast;
+  }
+
   // Switch graphics quality without reloading: resolution, shadows and post-processing change
   // straight away. Tree, rock and grass density are built with the world, so those follow on
   // the next load.
-  setQuality(name) {
+  setQuality(name, auto = false) {
     if (!QUALITY[name]) return;
     this.settings.quality = name;
+    if (!auto) this.settings.qualityChosen = true;
     this.saveSettings();
     const q = this.q = QUALITY[name], r = this.renderer;
     this.perf = null; // start resolution scaling afresh
@@ -120,6 +134,7 @@ class Game {
     Object.assign(sun.shadow.camera, { left: -S, right: S, top: S, bottom: -S });
     sun.shadow.camera.updateProjectionMatrix();
     if (this.world.grass) this.world.grass.visible = !!q.grass;
+    this.applyShadowBudget();
     // rebuild post-processing for the new sample count and effects
     for (const p of this.composer.passes) p.dispose?.();
     this.composer.renderTarget1.dispose(); this.composer.renderTarget2.dispose();
@@ -134,6 +149,17 @@ class Game {
     if (this.cam) { this.cam.distScale = s.camDist || 1; this.cam.baseFov = s.fov || 60; this.cam.reduceMotion = !!s.reduceMotion; }
     if (this.input) { this.input.sens = s.sens || 1; this.input.invert = !!s.invert; }
     if (this.player) this.player.classic = !!s.classic;
+    // modded mode: faster bike, records paused
+    const mod = s.mod && s.mod.on ? s.mod : null;
+    this.modded = !!mod;
+    if (this.player) {
+      const pl = this.player, v = (k, lo, hi) => (mod ? clamp(+mod[k] || 1, lo, hi) : 1);
+      pl.modSpeed = v('speed', 0.5, 4); pl.modAccel = v('accel', 0.5, 4); pl.modJump = v('jump', 0.5, 4);
+      pl.modSpin = v('spin', 0.5, 3); pl.modFlip = v('flip', 0.5, 3);
+      pl.grav = G * v('gravity', 0.2, 2.5);
+      pl.modBalance = !!(mod && mod.balance); pl.modNoBail = !!(mod && mod.nobail);
+    }
+    document.getElementById('hud-modded')?.classList.toggle('hidden', !this.modded);
   }
 
   quitToMenu() {
@@ -167,6 +193,14 @@ class Game {
       throw e;
     }
     this.renderer = renderer;
+    // Laptop and phone graphics chips start on Low unless the player has chosen a quality themselves.
+    if (!this.settings.qualityChosen) {
+      let gpu = '';
+      try { const gl = renderer.getContext(), e = gl.getExtension('WEBGL_debug_renderer_info'); gpu = e ? String(gl.getParameter(e.UNMASKED_RENDERER_WEBGL)) : ''; } catch (e) {}
+      const integrated = /Intel|UHD|Iris|Mali|Adreno|PowerVR|SwiftShader|llvmpipe|Radeon\(TM\) Graphics|Vega/i.test(gpu) && !/Arc\(TM\) A\d|RTX|GTX|RX \d/i.test(gpu);
+      this.settings.quality = this.touch || integrated ? 'low' : 'medium';
+      this.q = QUALITY[this.settings.quality];
+    }
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, this.q.pr));
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -222,6 +256,7 @@ class Game {
     this.goals = new Goals(this);
     this.replay = new Replay(this);
     this.applySettings();
+    this.applyShadowBudget();
     // music starts with the first click or key press (browsers block audio before that)
     const startMusic = () => { if (this.audio.musicVol > 0) this.audio.music.start(); window.removeEventListener('pointerdown', startMusic); window.removeEventListener('keydown', startMusic); };
     window.addEventListener('pointerdown', startMusic); window.addEventListener('keydown', startMusic);
@@ -356,19 +391,28 @@ class Game {
     this.cam.snap(this.player);
   }
 
-  // R / Back: hop back to the last safe spot. During a gate course that is the last gate you
-  // passed (the clock keeps running).
+  // R / Back. In a solo course: start the course over, straight away. Anywhere else (and in a
+  // multiplayer race, whose clock is shared): hop back to the last safe spot or gate.
   resetRider() {
+    const r = this.courses.run;
+    if (r && !r.opts.race) { this.restartCourse(); return; }
+    this.backToSafe();
+  }
+
+  // Backspace: back to the last gate you passed (the clock keeps running) or the last safe spot.
+  backToSafe() {
     const r = this.courses.run;
     if (r && r.state !== 'running') return;
     this.player.respawnSafe();
     this.cam.snap(this.player);
   }
 
-  // Backspace / pause menu: start a solo course over. A multiplayer race can't be restarted.
+  // Start a solo course over with a short countdown. A multiplayer race can't be restarted.
   restartCourse() {
     const r = this.courses.run;
-    if (r && r.state === 'running' && !r.opts.race) this.courses.start(r.course, {});
+    if (!r || r.opts.race) return;
+    if (this.player.ragdoll) this.player.ragdoll.active = false;
+    this.courses.start(r.course, { countdownFrom: 1.2, restart: true });
   }
 
   zoneName() {
@@ -476,22 +520,37 @@ class Game {
 
   // Keep the frame rate up by lowering render resolution. Steps down quickly and back up cautiously,
   // because every resize reallocates render targets.
-  adaptResolution(rawDt) {
+adaptResolution(rawDt) {
     if (!this.playing || this.paused) return;
-    const P = this.perf || (this.perf = { t: -3, n: 0, acc: 0, scale: 1, slow: 0 });
+    const P = this.perf || (this.perf = { t: -3, n: 0, acc: 0, scale: 1, slow: 0, fast: 0, probes: 0, locked: false, worst: 0 });
     P.t += rawDt;
     if (P.t < 0) return; // let the first seconds settle
     P.n++; P.acc += Math.min(rawDt, 0.1);
-    if (P.t < 3) return;
+    if (P.t < 2) return;
     const avg = P.acc / P.n;
     P.t = 0; P.n = 0; P.acc = 0;
-    P.slow = avg > 1 / 40 ? P.slow + 1 : 0;
-    P.fast = avg < 1 / 55 ? (P.fast || 0) + 1 : 0;
+    P.slow = avg > 1 / 45 ? P.slow + 1 : 0;
+    P.fast = avg < 1 / 56 ? P.fast + 1 : 0;
     let scale = P.scale;
-    if (P.slow >= 2 && P.scale > 0.62) { P.slow = 0; scale = Math.max(0.6, P.scale * 0.8); P.hold = 4; }
-    // climb back up, slowly, once things have been smooth for a while. Each step that
-    // has to be undone makes the next attempt wait longer, so it settles instead of pumping.
-    else if (P.fast >= (P.hold || 4) && P.scale < 1) { P.fast = 0; scale = Math.min(1, P.scale / 0.9); P.hold = Math.min(40, (P.hold || 4) * 2); }
+    if (P.slow >= 2) {
+      P.slow = 0;
+      if (P.probing) { P.locked = true; P.probing = false; }   // the last step up was a mistake: stay down for good
+      if (P.scale > 0.5) scale = Math.max(0.5, P.scale * 0.8);
+      else if (this.settings.autoQuality !== false) {
+        // resolution is as low as it goes and it is still slow: drop a whole quality tier
+        const order = ['ultra', 'high', 'medium', 'low'], k = order.indexOf(this.settings.quality);
+        if (k >= 0 && k < order.length - 1) {
+          this.setQuality(order[k + 1], true);
+          this.ui.toast(`Graphics lowered to ${order[k + 1]} to keep things smooth`);
+          return;
+        }
+      }
+    } else if (!P.locked && P.fast >= 15 && P.scale < 1 && P.probes < 2) {
+      // Smooth for 30 s: try one step back up. Every change reallocates render targets (a visible
+      // hitch), so this is attempted at most twice, and never again once a step up has to be undone.
+      P.fast = 0; P.probes++; P.probing = true;
+      scale = Math.min(1, P.scale / 0.8);
+    } else if (P.probing && P.fast >= 4) P.probing = false;     // the step up held
     if (scale !== P.scale) {
       P.scale = scale;
       const pr = Math.min(window.devicePixelRatio || 1, this.q.pr) * P.scale;
@@ -525,8 +584,9 @@ class Game {
       if (!this.paused) {
         if (input.camPressed) { this.settings.cam = this.cam.cycle(); this.saveSettings(); this.ui.toast(`Camera: ${this.cam.mode}`); }
         if (input.chatPressed) this.ui.openChat();
-        if (input.resetPressed && p.mode !== 'bail') this.resetRider();
-        if (input.restartPressed) this.restartCourse();
+        // R restarts a solo course even mid-crash; otherwise a crash handles its own get-back-on
+        if (input.resetPressed && (p.mode !== 'bail' || (this.courses.run && !this.courses.run.opts.race))) this.resetRider();
+        if (input.restartPressed && p.mode !== 'bail') this.backToSafe();
         if (input.interactPressed) {
           const c = this.courses.nearbyStart(p);
           if (c) this.courses.start(c);
@@ -586,7 +646,13 @@ class Game {
     this.net.update(dt);
     this.audio.update(p, this.paused || !this.playing);
     const focus = this.playing ? p.pos : this.camera.position;
-    this.env.update(dt, this.playing ? p.pos : new THREE.Vector3(0, 0, 0));
+    // shadow map cadence: the sun's shadow camera only moves on the frames the map is redrawn,
+    // so shadows never slide between updates
+    this.frameN = (this.frameN || 0) + 1;
+    const shadowFrame = this.shadowEvery <= 1 || this.frameN % this.shadowEvery === 0;
+    this.env.holdSun = !shadowFrame;
+    if (shadowFrame && this.shadowEvery > 1) this.renderer.shadowMap.needsUpdate = true;
+    this.env.update(dt, this.playing ? p.pos : this.origin || (this.origin = new THREE.Vector3()));
     this.world.update(dt, this.camera.position);
     this.grade.uniforms.uTime.value = (this.grade.uniforms.uTime.value + dt) % 100;
     this.composer.render(dt);
