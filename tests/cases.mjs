@@ -266,7 +266,7 @@ export const CASES = [
     },
   },
   {
-    name: 'courses: reset returns to the last gate with the clock running; restart starts over',
+    name: 'courses: Backspace returns to the last gate with the clock running; R starts the course over',
     run: () => {
       const g = window.__game, p = g.player, sim = window.__sim;
       sim.reset();
@@ -280,11 +280,11 @@ export const CASES = [
       for (let i = 0; i < 300 && r.idx < 1; i++) sim.step(1, { pedal: 1 });
       sim.step(90, { pedal: 1, steer: 0.4 });
       const tBefore = r.time;
-      g.resetRider();
+      g.backToSafe();          // Backspace: last gate, clock keeps running
       const back = Math.hypot(p.pos.x - gate.x, p.pos.z - gate.z) < 1.5;
       const same = g.courses.run === r && r.state === 'running' && r.idx === 1 && r.time >= tBefore;
-      g.restartCourse();
-      const fresh = g.courses.run && g.courses.run !== r && g.courses.run.state === 'countdown';
+      g.resetRider();          // R: start the course over with a short countdown
+      const fresh = g.courses.run && g.courses.run !== r && g.courses.run.state === 'countdown' && g.courses.run.countdown < 1.5;
       g.courses.cancel(true);
       return { ok: r.idx >= 1 && back && same && fresh, detail: `passedGate=${r.idx >= 1} backAtGate=${back} sameRun=${same} restarted=${fresh}` };
     },
@@ -752,6 +752,147 @@ export const CASES = [
       const inZone = w.treePoints.filter(([x, z]) => Math.abs(x - 300) < 45 && Math.abs(z + 40) < 120);
       const onLine = inZone.filter(([x, z]) => [288, 313, 329].some((lx) => Math.abs(x - lx) < 6.5) || z > 66 || z < -122);
       return { ok: inZone.length >= 40 && onLine.length === 0, detail: `${inZone.length} trees inside the spot, ${onLine.length} on a line` };
+    },
+  },
+  // ---------------- tweaks ----------------
+  {
+    name: 'courses: R restarts even in the middle of a crash',
+    run: () => {
+      const g = window.__game, p = g.player, sim = window.__sim;
+      sim.reset();
+      const c = g.courses.list.find((x) => x.id === 'yard');
+      g.courses.start(c, { countdownFrom: 0.05 });
+      sim.step(10, {});
+      const first = g.courses.run;
+      p.doBail('hard');
+      sim.step(5, {});
+      g.resetRider();
+      const r = g.courses.run;
+      const ok = r && r !== first && r.state === 'countdown' && p.mode === 'ground' && Math.hypot(p.pos.x - c.start.x, p.pos.z - c.start.z) < 1;
+      g.courses.cancel(true);
+      return { ok, detail: `restarted=${r !== first} mode=${p.mode}` };
+    },
+  },
+  {
+    name: 'courses: each gate shows how far ahead or behind your best run you are',
+    run: () => {
+      const g = window.__game, p = g.player, sim = window.__sim;
+      sim.reset();
+      const c = g.courses.list.find((x) => x.id === 'yard');
+      const el = document.getElementById('hud-split');
+      const gate = c.gates[0];
+      const pass = (pb) => {
+        if (pb) localStorage.setItem('rampedup.splits.yard', JSON.stringify(pb)); else localStorage.removeItem('rampedup.splits.yard');
+        localStorage.removeItem('rampedup.ghost.yard');
+        g.courses.start(c, { countdownFrom: 0.05 });
+        sim.step(10, {});
+        p.spawn(gate.x, gate.z + 3, Math.PI);
+        for (let i = 0; i < 300 && g.courses.run.idx < 1; i++) sim.step(1, { pedal: 1 });
+        const t = g.courses.run.splits[0];
+        const out = { text: el.textContent, ahead: el.classList.contains('ahead'), behind: el.classList.contains('behind'), t };
+        g.courses.cancel(true);
+        return out;
+      };
+      const none = pass(null), slowPb = pass([99, 120]), fastPb = pass([0.1, 0.2]);
+      localStorage.removeItem('rampedup.splits.yard');
+      const ok = /^\d+:\d\d\.\d\d$/.test(none.text) && !none.ahead && !none.behind
+        && slowPb.ahead && slowPb.text.startsWith('−') && fastPb.behind && fastPb.text.startsWith('+')
+        && Math.abs(parseFloat(fastPb.text.slice(1)) - (fastPb.t - 0.1)) < 0.02;
+      return { ok, detail: `no best: "${none.text}" · beating best: "${slowPb.text}" · behind best: "${fastPb.text}"` };
+    },
+  },
+  {
+    name: 'courses: split times are read off an old ghost when none were saved',
+    run: () => {
+      const g = window.__game;
+      const c = g.courses.list.find((x) => x.id === 'yard');
+      // a ghost that passes gate 1 at 4 s and gate 2 at 9 s
+      const g1 = c.gates[0], g2 = c.gates[1];
+      const frame = (t, x, z) => [t, x, 2, z, 0, 0, 0, 1];
+      const ghost = [frame(0, c.start.x, c.start.z), frame(2, g1.x, g1.z + 20), frame(4, g1.x, g1.z), frame(7, g2.x, g2.z + 15), frame(9, g2.x, g2.z), frame(10, g2.x, g2.z - 5)];
+      const s = g.courses.splitsFromGhost(c, ghost);
+      return { ok: Array.isArray(s) && s[0] === 4 && s[1] === 9 && s.length === 2, detail: JSON.stringify(s) };
+    },
+  },
+  {
+    name: 'modded mode: the bike is faster, and nothing is recorded',
+    run: () => {
+      const g = window.__game, p = g.player, sim = window.__sim;
+      const top = () => { sim.reset(-70, 62, Math.PI / 2); let v = 0; for (let i = 0; i < 600; i++) { sim.step(1, { pedal: 1 }); v = Math.max(v, p.speed); if (p.pos.x > 60) break; } return v; };
+      g.settings.mod = { on: false, speed: 2, accel: 3 }; g.applySettings();
+      const stock = top();
+      g.settings.mod.on = true; g.applySettings();
+      const modded = top();
+      const xp0 = g.progress.xp, done0 = g.goals.done.size;
+      g.progress.add(500, 'test');
+      g.goals.onEvent({ type: 'bank', score: 999999 });
+      const c = g.courses.list.find((x) => x.id === 'yard');
+      const best0 = g.courses.best.yard;
+      g.courses.start(c, { countdownFrom: 0.05 }); sim.step(10, {});
+      g.courses.run.idx = c.gates.length - 1; g.courses.run.time = 1; // about to finish in an impossible time
+      const last = c.gates[c.gates.length - 1];
+      p.spawn(last.x, last.z + 2, Math.PI); sim.step(60, { pedal: 1 });
+      const finished = !g.courses.run;
+      const badge = !document.getElementById('hud-modded').classList.contains('hidden');
+      const kept = g.courses.best.yard === best0 && g.progress.xp === xp0 && g.goals.done.size === done0;
+      g.settings.mod.on = false; g.applySettings();
+      document.getElementById('result').classList.add('hidden');
+      const off = document.getElementById('hud-modded').classList.contains('hidden') && p.modSpeed === 1;
+      return { ok: stock < 13 && modded > stock * 1.5 && finished && kept && badge && off, detail: `top speed ${Math.round(stock * 3.6)} -> ${Math.round(modded * 3.6)} km/h, finished=${finished}, records untouched=${kept}, badge=${badge}` };
+    },
+  },
+  {
+    name: 'performance: when resolution is already at its floor, quality drops a tier (and can be turned off)',
+    run: () => {
+      const g = window.__game;
+      const before = g.settings.quality;
+      g.noAdapt = false; g.playing = true; g.paused = false;
+      g.setQuality('medium', true); g.settings.autoQuality = true;
+      for (let i = 0; i < 20 * 40; i++) g.adaptResolution(1 / 20);
+      const dropped = g.settings.quality;
+      g.setQuality('medium', true); g.settings.autoQuality = false;
+      for (let i = 0; i < 20 * 40; i++) g.adaptResolution(1 / 20);
+      const kept = g.settings.quality, scale = g.perf.scale;
+      g.settings.autoQuality = true; g.setQuality(before, true); g.noAdapt = true;
+      return { ok: dropped === 'low' && kept === 'medium' && scale === 0.5, detail: `auto on: medium -> ${dropped}; auto off: stays ${kept} at ${scale}× resolution` };
+    },
+  },
+  {
+    name: 'performance: Low and Medium redraw shadows every other frame; Low trees cast none',
+    run: () => {
+      const g = window.__game;
+      const before = g.settings.quality;
+      g.setQuality('low', true);
+      const low = { every: g.shadowEvery, auto: g.renderer.shadowMap.autoUpdate, trees: g.world.treeMeshes.some((m) => m.castShadow) };
+      g.setQuality('high', true);
+      const high = { every: g.shadowEvery, auto: g.renderer.shadowMap.autoUpdate, trees: g.world.treeMeshes.every((m) => m.castShadow) };
+      g.setQuality(before, true); g.composer.render(0.016);
+      return { ok: low.every === 2 && !low.auto && !low.trees && high.every === 1 && high.auto && high.trees, detail: JSON.stringify({ low, high }) };
+    },
+  },
+  {
+    name: 'modded mode: jump power, gravity and no-crash landings take effect and switch off cleanly',
+    run: () => {
+      const g = window.__game, p = g.player, sim = window.__sim;
+      const hop = () => { sim.reset(-60, 30, Math.PI / 2); sim.step(20, { hop: true }); sim.step(1, { hopReleased: true }); let top = 0, air = 0; for (let i = 0; i < 600 && (i < 3 || p.mode === 'air'); i++) { sim.step(1, {}); top = Math.max(top, p.pos.y); air++; } return { h: top - g.world.anchors.yy, air: air / 60 }; };
+      const set = (m) => { g.settings.mod = Object.assign({ on: true, speed: 1, accel: 1, jump: 1, gravity: 1, spin: 1, flip: 1, balance: false, nobail: false }, m); g.applySettings(); };
+      set({ on: false }); const stock = hop();
+      set({ jump: 2 }); const jump = hop();
+      set({ gravity: 0.5 }); const moon = hop();
+      // no-crash: come down sideways and mid-flip
+      set({ nobail: true });
+      sim.reset(-60, 30, Math.PI / 2); p.vel.set(7, 0, 0); sim.step(12, { hop: true }); sim.step(1, { hopReleased: true });
+      p.heading += 1.5; p.air.flip = 2.4;
+      sim.step(120, {});
+      const stuck = !sim.has('ev:bail') && p.mode !== 'bail';
+      set({ on: false });
+      sim.reset(-60, 30, Math.PI / 2); p.vel.set(7, 0, 0); sim.step(12, { hop: true }); sim.step(1, { hopReleased: true });
+      p.heading += 1.5; p.air.flip = 2.4;
+      sim.step(120, {});
+      const normalBails = sim.has('ev:bail');
+      sim.step(300, {}); sim.reset();
+      const ok = jump.h > stock.h * 2.5 && moon.air > stock.air * 1.6 && stuck && normalBails && p.grav === 11 && p.modJump === 1;
+      return { ok, detail: `hop height ${stock.h.toFixed(2)} m -> ${jump.h.toFixed(2)} m at 2× jump; airtime ${stock.air.toFixed(2)} s -> ${moon.air.toFixed(2)} s at half gravity; no-crash landing stuck=${stuck}; same landing normally bails=${normalBails}` };
     },
   },
 ];

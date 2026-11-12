@@ -297,8 +297,27 @@ export class Courses {
     const gd = store('ghost.' + course.id);
     if (gd && course.type === 'gates' && !opts.race) this.spawnGhost(gd);
     if (opts.startAt) run.startAt = opts.startAt;
-    g.ui.courseStart(course);
+    // split times of your best run, to compare against at every gate
+    run.pb = course.type === 'gates' ? (store('splits.' + course.id) || (gd ? this.splitsFromGhost(course, gd) : null)) : null;
+    if (!opts.restart) g.ui.courseStart(course); else g.ui.el.result.classList.add('hidden');
     this.updateGateVisibility();
+  }
+
+  // Older saves have a ghost but no split times: read them off the ghost's path.
+  splitsFromGhost(course, data) {
+    const out = [];
+    let k = 0;
+    for (const gt of course.gates) {
+      let hit = null;
+      for (; k < data.length; k++) {
+        const f = data[k];
+        const dx = f[1] - gt.x, dz = f[3] - gt.z;
+        if (gt.y != null ? Math.hypot(dx, f[2] + 0.8 - gt.base, dz) < gt.r + 0.6 : Math.hypot(dx, dz) < gt.r + 0.4) { hit = f[0]; break; }
+      }
+      if (hit === null) return out.length ? out : null;
+      out.push(hit);
+    }
+    return out;
   }
 
   spawnGhost(data) {
@@ -422,6 +441,9 @@ export class Courses {
     const inside = gt.y != null ? Math.hypot(dx, dy, dz) < gt.r + 0.6 : (Math.hypot(dx, dz) < gt.r + 0.4 && dy > -2.5 && dy < gt.r * 1.6);
     if (inside) {
       r.splits.push(r.time);
+      // ahead of or behind your best run at this gate?
+      const ref = r.pb && r.pb[r.idx];
+      g.ui.splitPop(r.time, ref != null ? r.time - ref : null);
       r.idx++;
       g.audio.play('gate');
       // respawn at the last gate after a bail
@@ -468,8 +490,10 @@ export class Courses {
       result = r.time;
       medal = c.par.filter((p) => result <= p).length;
       isBest = !this.best[c.id] || result < this.best[c.id];
-      if (isBest) store('ghost.' + c.id, r.rec);
+      if (isBest && !g.modded) { store('ghost.' + c.id, r.rec); store('splits.' + c.id, r.splits); }
     }
+    // modded runs are for fun: nothing is recorded
+    if (g.modded) { isBest = false; medal = 0; }
     if (isBest) { this.best[c.id] = result; store('best', this.best); }
     this.medals[c.id] = Math.max(this.medals[c.id] || 0, medal);
     store('medals', this.medals);
@@ -480,16 +504,17 @@ export class Courses {
     g.audio.play(isBest ? 'record' : 'finish');
     if (medal > 0) setTimeout(() => g.audio.play('finish'), 400);
     this.refreshLabel(c);
-    g.ui.courseEnd({ course: c, result, medal, isBest, race: r.opts.race });
+    g.ui.courseEnd({ course: c, result, medal, isBest, race: r.opts.race, modded: g.modded });
     if (isBest || medal >= 3) g.fx?.confetti(g.player.pos, 140);
     g.progress?.add(150 + medal * 250 + (isBest ? 150 : 0), c.name);
-    if (r.opts.race) g.net.sendFinish(c.id, result);
+    if (r.opts.race && !g.modded) g.net.sendFinish(c.id, result);
     this.checkChallenges({ type: 'courseDone', medal, course: c });
     g.goals?.onEvent({ type: 'courseDone', medal, course: c });
   }
 
   checkChallenges(ev) {
     const g = this.game;
+    if (g.modded) return;
     for (const ch of CHALLENGES) {
       if (this.done.has(ch.id)) continue;
       let ok = false;

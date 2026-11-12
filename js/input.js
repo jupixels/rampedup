@@ -20,7 +20,7 @@ export const DEFAULT_PAD = {
 export const ACTION_LABELS = {
   pedal: 'Pedal · front flip', brake: 'Brake · back flip', left: 'Steer left', right: 'Steer right', hop: 'Bunny hop', manual: 'Manual',
   barspin: 'Barspin', tailwhip: 'Tailwhip', superman: 'Superman', nohander: 'No Hander', cancan: 'Can Can', tabletop: 'Table Top', nofooter: 'No Footer',
-  reset: 'Back to last gate / safe spot', restart: 'Restart course', interact: 'Start course / lift', camera: 'Camera', map: 'Map', chat: 'Chat', photo: 'Photo mode', replay: 'Instant replay', riders: 'Riders list',
+  reset: 'Restart course / back to safe spot', restart: 'Back to last gate', interact: 'Start course / lift', camera: 'Camera', map: 'Map', chat: 'Chat', photo: 'Photo mode', replay: 'Instant replay', riders: 'Riders list',
 };
 const PAD_NAMES = ['A', 'B', 'X', 'Y', 'LB', 'RB', 'LT', 'RT', 'Back', 'Start', 'L3', 'R3', 'D-pad ↑', 'D-pad ↓', 'D-pad ←', 'D-pad →', 'Home'];
 const TOUCH_NAMES = { pedal: 'stick up', brake: 'stick down', left: 'stick', right: 'stick', hop: 'HOP', manual: 'MANUAL', barspin: 'BAR', tailwhip: 'WHIP', superman: 'SUPER', nohander: 'NO HAND', cancan: 'CAN', tabletop: 'TABLE', nofooter: 'NO FOOT', reset: '↺', interact: 'GO', camera: 'CAM', map: 'MAP' };

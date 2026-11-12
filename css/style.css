@@ -306,3 +306,21 @@ input:focus, select:focus { border-color: var(--accent); }
 #replay input[type=range] { width: min(38vw, 420px); }
 #replay.recording .photo-bar { outline: 2px solid #ff3b3b; }
 #replay .photo-group button span { color: inherit; font-size: inherit; margin: 0; letter-spacing: inherit; text-transform: inherit; }
+
+/* gate split: ahead (green) or behind (red) your best run */
+.course-split { font: 800 30px/1.1 "Barlow Condensed", sans-serif; font-style: italic; letter-spacing: 0.02em; opacity: 0; text-shadow: 0 2px 6px rgba(0,0,0,0.6); margin-top: 2px; }
+.course-split.show { animation: splitpop 2.6s ease-out forwards; }
+.course-split.ahead { color: #57e08a; }
+.course-split.behind { color: #ff5d5d; }
+@keyframes splitpop { 0% { opacity: 0; transform: scale(1.5); } 12% { opacity: 1; transform: scale(1); } 75% { opacity: 1; } 100% { opacity: 0; } }
+#hud-modded { display: inline-block; margin-top: 4px; padding: 1px 8px; background: #c42b6b; color: #fff; font-weight: 800; font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; }
+#hud-modded.hidden { display: none; }
+/* short screens (laptops): the whole pause and title menu fits without scrolling */
+@media (max-height: 900px) {
+  .menu-list { gap: 0; }
+  .menu-list button { font-size: clamp(20px, 5vh, 40px); padding: 2px 16px 1px 12px; white-space: nowrap; text-align: left; }
+  .menu-left { padding-top: clamp(12px, 3vh, 28px); padding-bottom: clamp(10px, 2vh, 20px); gap: 8px; }
+  #pause .logo { display: none; }
+  .logo.big { font-size: clamp(34px, 9vh, 64px); }
+  .tagline { margin: 0; }
+}

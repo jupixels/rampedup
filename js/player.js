@@ -84,6 +84,9 @@ export class Player {
     this.frozen = false;
     this.events = []; // for audio/fx
     this.netAnim = { type: 0, t: 0 };
+    // modded mode multipliers (all 1 / off in the normal game)
+    this.modSpeed = 1; this.modAccel = 1; this.modJump = 1; this.modSpin = 1; this.modFlip = 1;
+    this.grav = G; this.modBalance = false; this.modNoBail = false;
     this.classic = false;  // classic controls: flips and manuals react to keys already held
     this.fakie = false;    // rolling backwards on purpose (landed fakie)
     this.brakeLock = false;
@@ -169,8 +172,9 @@ export class Player {
     const brake = (this.manual && !this.classic) || this.brakeLock ? 0 : input.brake;
     const brakeHit = input.brake > 0.5 && !this.prevBrake;
     this.prevBrake = input.brake > 0.5;
-    if (pedal > 0 && vf < PEDAL_MAX) {
-      const a = (vf < 3 ? 6.5 : 5.4) * (1 - Math.max(0, vf) / PEDAL_MAX);
+    const vmax = PEDAL_MAX * this.modSpeed;
+    if (pedal > 0 && vf < vmax) {
+      const a = (vf < 3 ? 6.5 : 5.4) * this.modAccel * (1 - Math.max(0, vf) / vmax);
       vf += pedal * a * dt;
       this.pedaling = true;
     } else this.pedaling = false;
@@ -183,10 +187,10 @@ export class Player {
     }
     this.skidding = (brake > 0.5 && Math.abs(vf) > 2.5) || Math.abs(vl) > 1.6;
     // gravity along the surface
-    const gf = -G * f.y, gl = -G * lat.y;
+    const gf = -this.grav * f.y, gl = -this.grav * lat.y;
     vf += gf * dt; vl += gl * dt;
     // resistance
-    vf -= Math.sign(vf) * Math.min(Math.abs(vf), (roll + 0.0034 * vf * vf) * dt);
+    vf -= Math.sign(vf) * Math.min(Math.abs(vf), (roll + (0.0034 / (this.modSpeed * this.modSpeed)) * vf * vf) * dt);
     // grip
     vl *= Math.exp(-(surf === 'dirt' || surf === 'sand' ? 7 : 11) * dt);
     // steering
@@ -214,7 +218,7 @@ export class Player {
     this.vel.copy(f).multiplyScalar(vf).addScaledVector(lat, vl);
     // bunny hop
     if (hopRelease && this.preload > 0.05) {
-      const imp = 3.2 + this.preload * 1.7;
+      const imp = (3.2 + this.preload * 1.7) * this.modJump;
       this.vel.addScaledVector(n, imp);
       if (n.y > 0.6) this.vel.y += 0.3;
       this.goAir(true);
@@ -230,7 +234,7 @@ export class Player {
 
   integrateGround(dt) {
     const nx = this.pos.x + this.vel.x * dt, nz = this.pos.z + this.vel.z * dt;
-    const ny = this.pos.y + this.vel.y * dt - 0.5 * G * dt * dt;
+    const ny = this.pos.y + this.vel.y * dt - 0.5 * this.grav * dt * dt;
     const hstep = Math.hypot(this.vel.x, this.vel.z) * dt;
     const tol = STEP_UP + hstep * 3.7;
     // wall?
@@ -269,7 +273,7 @@ export class Player {
 
   hitWall() {
     const sp = Math.hypot(this.vel.x, this.vel.z);
-    if (sp > 7.5 && !this.manual) { this.doBail('wall'); return; }
+    if (sp > 7.5 && !this.manual && !this.modNoBail) { this.doBail('wall'); return; }
     this.vel.x *= -0.25; this.vel.z *= -0.25;
     this.emit('bump', { strength: sp });
   }
@@ -382,16 +386,16 @@ export class Player {
     A.t += dt;
     // late pop off a lip
     if (hopRelease && A.t < A.popWindow && this.preload > 0.05) {
-      this.vel.y += 1.5 + this.preload * 2.0;
+      this.vel.y += (1.5 + this.preload * 2.0) * this.modJump;
       A.hopped = true;
       this.emit('hop');
     }
-    this.vel.y -= G * dt;
+    this.vel.y -= this.grav * dt;
     const sp2 = this.vel.lengthSq();
     this.vel.multiplyScalar(1 - Math.min(0.02, 0.0034 * Math.sqrt(sp2) * dt));
     // spin
     const spinIn = input.steer;
-    const targetSpinVel = spinIn * 7.2;
+    const targetSpinVel = spinIn * 7.2 * this.modSpin;
     A.spinVel = damp(A.spinVel, targetSpinVel, spinIn ? 7 : 4, dt);
     if (!spinIn && A.targetHeading !== null) {
       // vert auto-turn back into the ramp
@@ -414,7 +418,7 @@ export class Player {
     // ignored until it has been let go once.
     let flipIn = input.flip;
     if (!A.flipArmed) { if (Math.abs(flipIn) < 0.3) A.flipArmed = true; flipIn = 0; }
-    if (flipIn) A.flipVel = damp(A.flipVel, flipIn * 6.6, 5, dt);
+    if (flipIn) A.flipVel = damp(A.flipVel, flipIn * 6.6 * this.modFlip, 5, dt);
     else {
       // settle towards the nearest upright orientation
       const res = wrapAngle(A.flip);
@@ -431,7 +435,7 @@ export class Player {
     const wall = this.col.obstacle(nx, nz, ny + 0.45, ny + 60);
     if (wall !== null && wall > this.pos.y + 0.45) {
       const sp = Math.hypot(this.vel.x, this.vel.z);
-      if (sp > 6.5) { this.doBail('wall'); return; }
+      if (sp > 6.5 && !this.modNoBail) { this.doBail('wall'); return; }
       this.vel.x *= -0.25; this.vel.z *= -0.25;
       this.pos.y = ny;
       this.emit('bump', { strength: sp });
@@ -464,6 +468,7 @@ export class Player {
     }
     if (vn > 16.5) fails.push('hard');
     if (g.water) fails.push('water');
+    if (this.modNoBail && !g.water) fails.length = 0;
     if (fails.length) {
       this.pos.y = g.h;
       this.doBail(fails[0], vn);
@@ -550,12 +555,12 @@ export class Player {
   stepGrind(dt, input, jump) {
     const g = this.grind;
     const r = g.rail;
-    g.speed += -G * r.dir.y * g.sign * dt - 0.7 * dt;
+    g.speed += -this.grav * r.dir.y * g.sign * dt - 0.7 * dt;
     g.t += g.speed * g.sign * dt;
     g.dist += g.speed * dt;
     g.time += dt;
     // balance
-    g.balVel += ((Math.random() - 0.5) * 3.2 + g.bal * (1.4 + g.time * 0.25)) * dt;
+    g.balVel += ((Math.random() - 0.5) * 3.2 + g.bal * (1.4 + g.time * 0.25)) * (this.modBalance ? 0.2 : 1) * dt;
     g.balVel -= input.steer * 3.6 * dt;
     g.balVel *= Math.exp(-0.6 * dt);
     g.bal += g.balVel * dt;
@@ -574,7 +579,7 @@ export class Player {
       this.goAir(up > 2);
       this.air.fromGrind = true;
     };
-    if (jump) { leave(4.4 + this.preload * 1.2); this.emit('hop'); return; }
+    if (jump) { leave((4.4 + this.preload * 1.2) * this.modJump); this.emit('hop'); return; }
     if (g.t < 0 || g.t > r.len) { leave(0.6); return; }
     if (g.speed < 0.4) { leave(0.2); return; }
     if (Math.abs(g.bal) > 1) { this.doBail('balance'); }
@@ -609,7 +614,7 @@ export class Player {
   stepStall(dt, input, jump) {
     const s = this.stall;
     s.time += dt;
-    s.balVel += ((Math.random() - 0.5) * 2.6 + s.bal * (1.2 + s.time * 0.35)) * dt;
+    s.balVel += ((Math.random() - 0.5) * 2.6 + s.bal * (1.2 + s.time * 0.35)) * (this.modBalance ? 0.2 : 1) * dt;
     s.balVel -= input.steer * 3.4 * dt;
     s.balVel *= Math.exp(-0.6 * dt);
     s.bal += s.balVel * dt;
@@ -618,7 +623,7 @@ export class Player {
     if (jump || s.time > 5) {
       // drop back in
       this.vel.copy(s.n).multiplyScalar(1.5);
-      this.vel.y = 2.2 + this.preload * 0.8;
+      this.vel.y = (2.2 + this.preload * 0.8) * this.modJump;
       this.stall = null;
       this.game.tricks.grindEnd();
       this.goAir(true);
@@ -659,7 +664,7 @@ export class Player {
   stepWall(dt, input, jump) {
     const W = this.wall, w = W.w;
     W.time += dt;
-    W.vy -= G * 0.42 * dt;
+    W.vy -= this.grav * 0.42 * dt;
     W.speed = Math.max(0, W.speed - 0.9 * dt);
     W.t += W.speed * W.dir * dt;
     let y = this.pos.y + W.vy * dt;
@@ -677,7 +682,7 @@ export class Player {
       this.goAir(up > 1);
       this.air.fromGrind = true;
     };
-    if (jump) { W.vy = Math.max(W.vy, 0); leave(3.2, 3.6 + this.preload); this.emit('hop'); return; }
+    if (jump) { W.vy = Math.max(W.vy, 0); leave(3.2, (3.6 + this.preload) * this.modJump); this.emit('hop'); return; }
     const g = this.col.ground(this.pos.x + w.nx * 0.35, this.pos.z + w.nz * 0.35, y + 0.3, this.g2);
     if (W.t < 0.2 || W.t > w.len - 0.2 || W.time > 1.7 || W.speed < 1.5 || y <= g.h + 0.12) leave(1.6, 0.4);
   }
@@ -697,7 +702,7 @@ export class Player {
     if (!m) return;
     if (!input.manual) { this.endManual(true); return; }
     m.time += dt;
-    m.balVel += ((Math.random() - 0.5) * 2.0 + m.bal * (1.15 + m.time * 0.15)) * dt;
+    m.balVel += ((Math.random() - 0.5) * 2.0 + m.bal * (1.15 + m.time * 0.15)) * (this.modBalance ? 0.2 : 1) * dt;
     // balance input needs a fresh press too, so a held pedal key can't tip you over
     let lean = input.flip;
     if (!m.armed) { if (Math.abs(lean) < 0.3) m.armed = true; lean = 0; }
