@@ -1,7 +1,37 @@
 // Test cases. Each `run` executes inside the page with `window.__game` (the game)
 // and `window.__sim` (the driver from run.mjs) available, and returns { ok, detail }.
 
+// Reads the lower half of the frame (ground and rider) back from the GPU.
+// A broken render shows up as a GL error, a blank or blown-out picture, or one with no detail.
+const PICTURE = `(g) => {
+  const gl = g.renderer.getContext();
+  while (gl.getError() !== gl.NO_ERROR) { /* clear */ }
+  g.paused = false; g.playing = true; g.clock.getDelta();
+  for (let i = 0; i < 6; i++) g.frame();           // the real frame loop, exactly as the game runs it
+  const err = gl.getError();
+  const w = gl.drawingBufferWidth, h = gl.drawingBufferHeight;
+  g.composer.render(0.016);
+  const px = new Uint8Array(w * 4);
+  const rows = [0.15, 0.3, 0.45].map((f) => { gl.readPixels(0, Math.floor(h * f), w, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); let sum = 0, sq = 0, n = 0; for (let k = 0; k < px.length; k += 16) { const v = (px[k] + px[k + 1] + px[k + 2]) / 3; sum += v; sq += v * v; n++; } const mean = sum / n; return { mean, sd: Math.sqrt(Math.max(0, sq / n - mean * mean)) }; });
+  const mean = rows.reduce((a, r) => a + r.mean, 0) / rows.length, sd = Math.max(...rows.map((r) => r.sd));
+  const bad = [];
+  if (err !== gl.NO_ERROR) bad.push('GL error ' + err);
+  if (mean > 215 || mean < 12) bad.push('ground brightness ' + mean.toFixed(0) + ' (blank or blown out)');
+  if (sd < 2) bad.push('no detail in the picture');
+  return { bad, text: 'err=' + err + ' brightness=' + mean.toFixed(0) + ' detail=' + sd.toFixed(1) };
+}`;
+
 export const CASES = [
+  {
+    // must stay first: it checks the game exactly as it comes up, before any test touches a setting
+    name: 'rendering: the game as it boots draws a real picture with no GL errors',
+    run: new Function(`
+      const g = window.__game;
+      g.cam.snap(g.player);
+      const r = (${PICTURE})(g);
+      return { ok: !r.bad.length, detail: r.bad.length ? r.bad.join('; ') : r.text + ' (' + g.settings.quality + ')' };
+    `),
+  },
   {
     name: 'world: straight rides through every spot stay stable',
     run: () => {
@@ -858,16 +888,30 @@ export const CASES = [
     },
   },
   {
-    name: 'performance: Low and Medium redraw shadows every other frame; Low trees cast none',
+    name: 'rendering: every quality still draws a real picture after switching to it',
+    run: new Function(`
+      const g = window.__game, sim = window.__sim;
+      const before = g.settings.quality, out = {}, bad = [];
+      for (const q of ['low', 'medium', 'high']) {
+        g.setQuality(q, true); g.env.setTime('midday'); sim.reset(); g.cam.snap(g.player);
+        const r = (${PICTURE})(g);
+        out[q] = r.text; for (const b of r.bad) bad.push(q + ': ' + b);
+      }
+      g.setQuality(before, true); g.env.setTime(g.settings.time); g.composer.render(0.016);
+      return { ok: !bad.length, detail: bad.length ? bad.join('; ') : JSON.stringify(out) };
+    `),
+  },
+  {
+    name: 'performance: trees do not cast shadows on Low, and do on High',
     run: () => {
       const g = window.__game;
       const before = g.settings.quality;
       g.setQuality('low', true);
-      const low = { every: g.shadowEvery, auto: g.renderer.shadowMap.autoUpdate, trees: g.world.treeMeshes.some((m) => m.castShadow) };
+      const low = g.world.treeMeshes.some((m) => m.castShadow);
       g.setQuality('high', true);
-      const high = { every: g.shadowEvery, auto: g.renderer.shadowMap.autoUpdate, trees: g.world.treeMeshes.every((m) => m.castShadow) };
+      const high = g.world.treeMeshes.every((m) => m.castShadow);
       g.setQuality(before, true); g.composer.render(0.016);
-      return { ok: low.every === 2 && !low.auto && !low.trees && high.every === 1 && high.auto && high.trees, detail: JSON.stringify({ low, high }) };
+      return { ok: !low && high && g.renderer.shadowMap.autoUpdate === true, detail: `low casts=${low} high casts=${high}` };
     },
   },
   {

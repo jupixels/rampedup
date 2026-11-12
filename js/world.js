@@ -125,14 +125,12 @@ export class Environment {
 
   update(dt, focus) {
     // shadow camera follows the player, snapped to texels to avoid shimmer
-    if (!this.holdSun) {
-      const S = this.shadowRange;
-      const texel = (2 * S) / this.sun.shadow.mapSize.x;
-      const fx = Math.round(focus.x / texel) * texel, fz = Math.round(focus.z / texel) * texel;
-      this.sun.target.position.set(fx, focus.y, fz);
-      this.sun.position.set(fx + this.sunDir.x * 250, focus.y + this.sunDir.y * 250, fz + this.sunDir.z * 250);
-      this.sun.target.updateMatrixWorld();
-    }
+    const S = this.shadowRange;
+    const texel = (2 * S) / this.sun.shadow.mapSize.x;
+    const fx = Math.round(focus.x / texel) * texel, fz = Math.round(focus.z / texel) * texel;
+    this.sun.target.position.set(fx, focus.y, fz);
+    this.sun.position.set(fx + this.sunDir.x * 250, focus.y + this.sunDir.y * 250, fz + this.sunDir.z * 250);
+    this.sun.target.updateMatrixWorld();
     this.clouds.material.uniforms.uTime.value += dt;
     this.clouds.position.x = focus.x; this.clouds.position.z = focus.z;
     this.ridges.position.set(focus.x, 0, focus.z);

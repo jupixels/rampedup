@@ -27,8 +27,8 @@ import { ZONES, SPAWN } from './layout.js';
 import { store, clamp } from './util.js';
 
 const QUALITY = {
-  low:    { pr: 1,    shadows: 1024, shadowRange: 40, trees: 900,  rocks: 160, grass: false, msaa: 0, bloom: false, gtao: false, shadowEvery: 2, treeShadows: false },
-  medium: { pr: 1,    shadows: 2048, shadowRange: 50, trees: 1600, rocks: 260, grass: true, grassSpacing: 0.36, grassRadius: 20, msaa: 2, bloom: true, gtao: false, shadowEvery: 2 },
+  low:    { pr: 1,    shadows: 1024, shadowRange: 40, trees: 900,  rocks: 160, grass: false, msaa: 0, bloom: false, gtao: false, treeShadows: false },
+  medium: { pr: 1,    shadows: 2048, shadowRange: 50, trees: 1600, rocks: 260, grass: true, grassSpacing: 0.36, grassRadius: 20, msaa: 2, bloom: true, gtao: false },
   high:   { pr: 1.5,  shadows: 2048, shadowRange: 65, trees: 2400, rocks: 380, grass: true, grassSpacing: 0.25, grassRadius: 30, msaa: 4, bloom: true, gtao: false },
   ultra:  { pr: 2,    shadows: 4096, shadowRange: 85, trees: 3600, rocks: 600, grass: true, grassSpacing: 0.17, grassRadius: 42, msaa: 4, bloom: true, gtao: true },
 };
@@ -102,13 +102,13 @@ class Game {
 
   saveSettings() { store('settings', this.settings); }
 
-  // Shadows are the most expensive pass on laptop graphics. On Low and Medium the shadow map is
-  // redrawn every other frame (the rider's shadow trails by one frame, which nobody can see), and
-  // on Low the trees, which are most of its triangles, stop casting.
+  // Shadows are the most expensive pass on laptop graphics. On Low the trees, which are most of
+  // its triangles, do not cast.
+  // (Redrawing the shadow map only every other frame was tried and removed: with this renderer a
+  // frame that skips the shadow pass fails to draw anything lit, which blanked the whole scene.)
   applyShadowBudget() {
     const q = this.q;
-    this.shadowEvery = q.shadowEvery || 1;
-    this.renderer.shadowMap.autoUpdate = this.shadowEvery === 1;
+    this.renderer.shadowMap.autoUpdate = true;
     const cast = q.shadows > 0 && q.treeShadows !== false;
     for (const m of this.world.treeMeshes || []) m.castShadow = cast;
   }
@@ -646,12 +646,6 @@ adaptResolution(rawDt) {
     this.net.update(dt);
     this.audio.update(p, this.paused || !this.playing);
     const focus = this.playing ? p.pos : this.camera.position;
-    // shadow map cadence: the sun's shadow camera only moves on the frames the map is redrawn,
-    // so shadows never slide between updates
-    this.frameN = (this.frameN || 0) + 1;
-    const shadowFrame = this.shadowEvery <= 1 || this.frameN % this.shadowEvery === 0;
-    this.env.holdSun = !shadowFrame;
-    if (shadowFrame && this.shadowEvery > 1) this.renderer.shadowMap.needsUpdate = true;
     this.env.update(dt, this.playing ? p.pos : this.origin || (this.origin = new THREE.Vector3()));
     this.world.update(dt, this.camera.position);
     this.grade.uniforms.uTime.value = (this.grade.uniforms.uTime.value + dt) % 100;
