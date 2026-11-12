@@ -109,6 +109,11 @@ export class Player {
     this.lastSafe.pos.copy(this.pos); this.lastSafe.heading = heading;
     Object.assign(this.model.pose, { barspin: 0, whip: 0, superman: 0, nohander: 0, cancan: 0, nofooter: 0, tuck: 0, xup: 0, turndown: 0, tucknh: 0, seat: 0, onefoot: 0 });
     this.tableRoll = 0;
+    // start square: bars straight, bike upright, no leftover lean, wheelie, crouch or stored hop
+    this.steerVis = 0; this.lean = 0; this.yawRate = 0; this.pitchVis = 0; this.wheelieVis = 0;
+    this.preload = 0; this.landSquash = 0; this.skidding = false; this.pedaling = false;
+    this.crank = Math.round(this.crank / Math.PI) * Math.PI;
+    this.model.pose.steer = 0; this.model.pose.crouch = 0;
     this.updateVisual(1);
   }
 
@@ -798,7 +803,7 @@ export class Player {
     if (this.stall) wheelie = this.stall.wheelie;
     this.wheelieVis = damp(this.wheelieVis || 0, wheelie, 12, dt);
     // lean into turns
-    const targetLean = this.mode === 'ground' ? clamp(-(this.yawRate || 0) * this.speed / G, -0.6, 0.6) : 0;
+    const targetLean = this.mode === 'ground' && !this.frozen ? clamp(-(this.yawRate || 0) * this.speed / G, -0.6, 0.6) : 0;
     this.lean = damp(this.lean, targetLean, 8, dt);
     const grindLean = this.grind ? this.grind.bal * 0.35 : this.stall ? this.stall.bal * 0.3 : 0;
     q.multiply(tmpQ.setFromAxisAngle(AZ, this.lean + grindLean + (this.tableRoll || 0)));
@@ -823,7 +828,9 @@ export class Player {
     P.wheel = -this.wheel;
     P.crank = -this.crank;
     // steering visual
-    const steerT = this.mode === 'ground' ? clamp(input.steer * 0.35 / (1 + this.speed * 0.12), -0.5, 0.5) : this.mode === 'air' ? input.steer * 0.12 : 0;
+    // (held still on a start line, the bars stay straight whatever keys are down)
+    const steerIn = this.frozen ? 0 : input.steer;
+    const steerT = this.mode === 'ground' ? clamp(steerIn * 0.35 / (1 + this.speed * 0.12), -0.5, 0.5) : this.mode === 'air' ? steerIn * 0.12 : 0;
     this.steerVis = damp(this.steerVis, steerT, 10, dt);
     P.steer = this.steerVis;
     // crouch from preload & landing squash

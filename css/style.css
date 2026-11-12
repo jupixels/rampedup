@@ -110,7 +110,8 @@ input:focus, select:focus { border-color: var(--accent); }
 .course-name { font-size: 18px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.12em; color: var(--accent); }
 .course-time { font-family: var(--display); font-size: 52px; line-height: 1; }
 .course-sub { font-size: 17px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
-.hud-compass { position: absolute; top: 110px; left: 50%; width: 46px; height: 46px; margin-left: -23px; display: none; }
+/* sits below the course name, clock, gate count and split time */
+.hud-compass { position: absolute; top: 172px; left: 50%; width: 46px; height: 46px; margin-left: -23px; display: none; }
 .hud-compass.on { display: block; }
 .hud-compass i { position: absolute; inset: 0; background: var(--accent); clip-path: polygon(50% 0, 100% 80%, 50% 62%, 0 80%); filter: drop-shadow(0 2px 6px rgba(0,0,0,0.5)); }
 .combo { position: absolute; left: 50%; top: 24%; transform: translateX(-50%); text-align: center; width: min(900px, 92vw); opacity: 0; transition: opacity .2s; }

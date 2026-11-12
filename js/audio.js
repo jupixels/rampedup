@@ -44,12 +44,31 @@ export class Audio {
     this.ready = true;
   }
 
+  // The tab was hidden or the window minimised: fade everything out, and back in on return.
+  setAway(away) {
+    if (this.away === away) return;
+    this.away = away;
+    const g = this.sfx.master, ctx = this.sfx.ctx;
+    if (!g || !ctx) return;
+    const target = away || this.muted ? 0 : this.volume;
+    try {
+      g.gain.cancelScheduledValues(ctx.currentTime);
+      g.gain.setTargetAtTime(target, ctx.currentTime, away ? 0.25 : 0.5); // about 1 s out, 2 s back in
+    } catch (e) {}
+  }
+
   apply() {
+    if (this.away) return this.applyBuses();
     this.sfx.setVolume('master', this.muted ? 0 : this.volume);
+    this.applyBuses();
+  }
+  applyBuses() {
     this.sfx.setVolume('music', this.musicVol * 0.6);
     this.sfx.setVolume('sfx', this.sfxVol);
     this.sfx.setVolume('ui', this.sfxVol);
   }
+  // the level the master bus is heading for right now (for tests and the mute button)
+  get masterTarget() { return this.away || this.muted ? 0 : this.volume; }
   setMusicVolume(v) { this.musicVol = v; store('musicVol', v); this.apply(); if (v > 0) this.music.start(); }
   setSfxVolume(v) { this.sfxVol = v; store('sfxVol', v); this.apply(); }
   setVolume(v) { this.volume = v; store('volume', v); this.apply(); }

@@ -313,8 +313,8 @@ export const CASES = [
       g.backToSafe();          // Backspace: last gate, clock keeps running
       const back = Math.hypot(p.pos.x - gate.x, p.pos.z - gate.z) < 1.5;
       const same = g.courses.run === r && r.state === 'running' && r.idx === 1 && r.time >= tBefore;
-      g.resetRider();          // R: start the course over with a short countdown
-      const fresh = g.courses.run && g.courses.run !== r && g.courses.run.state === 'countdown' && g.courses.run.countdown < 1.5;
+      g.resetRider();          // R: start the course over with the full 3-2-1
+      const fresh = g.courses.run && g.courses.run !== r && g.courses.run.state === 'countdown' && g.courses.run.countdown === 3;
       g.courses.cancel(true);
       return { ok: r.idx >= 1 && back && same && fresh, detail: `passedGate=${r.idx >= 1} backAtGate=${back} sameRun=${same} restarted=${fresh}` };
     },
@@ -1018,6 +1018,88 @@ export const CASES = [
       const off = !g.modded && p.modJump === 1 && !document.querySelector('#tpl-settings').content.querySelector('[data-bind=modon]');
       g.setPaused(false);
       return { ok: !!btn && applied && off, detail: `applied=${applied} off=${off}` };
+    },
+  },
+  {
+    name: 'courses: the bike sits straight on the start line, whatever it was doing before',
+    run: () => {
+      const g = window.__game, p = g.player, sim = window.__sim;
+      sim.reset(-60, 30, Math.PI / 2);
+      // carve hard left with the bars turned, in a manual, mid-preload
+      sim.step(90, { pedal: 1 }); sim.step(40, { pedal: 1, steer: 1, hop: true });
+      const before = { steer: Math.abs(p.model.pose.steer), lean: Math.abs(p.lean) };
+      const c = g.courses.list.find((x) => x.id === 'yard');
+      g.courses.start(c);
+      // keep holding steer through the countdown
+      sim.step(60, { steer: 1 });
+      const P = p.model.pose;
+      const up = new (p.pos.constructor)(0, 1, 0).applyQuaternion(p.model.root.quaternion);
+      const fwd = new (p.pos.constructor)(0, 0, 1).applyQuaternion(p.model.root.quaternion);
+      const facing = Math.abs(Math.atan2(fwd.x, fwd.z) - c.start.yaw) % (Math.PI * 2);
+      const ok = before.steer > 0.05 && before.lean > 0.05 && Math.abs(P.steer) < 0.01 && Math.abs(p.lean) < 0.01 && P.crouch < 0.05 && p.preload === 0
+        && up.y > 0.995 && Math.min(facing, Math.PI * 2 - facing) < 0.02 && g.courses.run.state === 'countdown';
+      g.courses.cancel(true);
+      return { ok, detail: `before: bars ${before.steer.toFixed(2)} lean ${before.lean.toFixed(2)} · on the line: bars ${P.steer.toFixed(3)} lean ${p.lean.toFixed(3)} crouch ${P.crouch.toFixed(2)} upright ${up.y.toFixed(3)} off-heading ${Math.min(facing, Math.PI * 2 - facing).toFixed(3)}` };
+    },
+  },
+  {
+    name: 'HUD: the split time sits clear of the direction arrow',
+    run: () => {
+      const g = window.__game, sim = window.__sim;
+      sim.reset();
+      const hud = document.getElementById('hud'); hud.classList.remove('hidden');
+      const c = g.courses.list.find((x) => x.id === 'yard');
+      g.courses.start(c, { countdownFrom: 0.05 }); sim.step(10, {});
+      for (let i = 0; i < 20; i++) g.ui.update(1 / 60);
+      g.ui.splitPop(12.34, -0.42);
+      const split = document.getElementById('hud-split').getBoundingClientRect();
+      const arrow = document.getElementById('hud-compass').getBoundingClientRect();
+      const shown = document.getElementById('hud-compass').classList.contains('on') && split.height > 0 && arrow.height > 0;
+      const gap = arrow.top - split.bottom;
+      g.courses.cancel(true);
+      return { ok: shown && gap >= 4, detail: `split ends at ${Math.round(split.bottom)} px, arrow starts at ${Math.round(arrow.top)} px (gap ${Math.round(gap)} px), arrow shown=${shown}` };
+    },
+  },
+  {
+    name: 'audio: sound fades out when the tab is hidden and back in when it returns',
+    run: async () => {
+      const g = window.__game, a = g.audio;
+      if (!a.sfx.master || !a.sfx.ctx) return { ok: false, detail: 'no audio engine' };
+      const wasMuted = a.muted, wasVol = a.volume;
+      a.muted = false; a.volume = 0.8; a.away = false; a.apply();
+      try { await a.sfx.ctx.resume(); } catch (e) {}
+      const running = a.sfx.ctx.state === 'running';
+      const hide = (h) => { Object.defineProperty(document, 'hidden', { configurable: true, get: () => h }); document.dispatchEvent(new Event('visibilitychange')); };
+      const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+      await wait(250);
+      const start = a.sfx.master.gain.value;
+      hide(true);
+      const tHidden = a.masterTarget;
+      a.setVolume(0.8);                      // a settings change while away must not bring the sound back
+      await wait(1500);
+      const away = a.sfx.master.gain.value;
+      hide(false);
+      const tBack = a.masterTarget;
+      await wait(2600);
+      const back = a.sfx.master.gain.value;
+      delete document.hidden;
+      a.muted = wasMuted; a.volume = wasVol; a.away = false; a.apply();
+      g.setPaused(false);
+      // a headless browser may refuse to start audio; then only the targets can be checked
+      const levels = !running || (start > 0.6 && away < 0.05 && back > 0.7);
+      return { ok: tHidden === 0 && tBack === 0.8 && levels, detail: `audio running=${running}; level ${start.toFixed(2)} -> ${away.toFixed(2)} hidden -> ${back.toFixed(2)} back` };
+    },
+  },
+  {
+    name: 'world: the Channel floor is not level with the slab under it',
+    run: () => {
+      const g = window.__game, A = g.world.anchors, col = g.world.collision;
+      const slab = A.channel.y;                 // top of the base slab
+      const floor = col.ground(A.channel.x + 40, A.channel.z, slab + 1, { n: g.player.normal.clone() }).h;
+      // everything that was built on the floor still stands on it
+      const sim = window.__sim; sim.reset(A.channel.x - 50, A.channel.z, Math.PI / 2);
+      sim.step(240, { pedal: 1 });
+      return { ok: floor - slab > 0.02 && floor - slab < 0.06 && !sim.has('ev:bail'), detail: `floor is ${((floor - slab) * 100).toFixed(1)} cm above the slab; ride along it: ${sim.has('ev:bail') ? 'crashed' : 'clean'}` };
     },
   },
 ];
