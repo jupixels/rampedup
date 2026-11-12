@@ -82,10 +82,15 @@ export class Tricks {
     if (spinName && spinName !== 'Air') names.push(spinName);
     if (flipName) names.push(flipName);
     names.push(...animNames);
+    // out of fakie: a 180 is a Half Cab, a 360 a Full Cab; anything else gets a Fakie prefix
+    const cab = info.fakieStart && !flips && !animNames.length && (deg === 180 || deg === 360) && !air.vert;
+    if (cab) { names.length = 0; names.push(deg === 180 ? 'Half Cab' : 'Full Cab'); pts += 80; }
     let name = names.join(' ');
+    if (info.fakieStart && name && !cab) { name = 'Fakie ' + name; pts *= 1.15; }
     // a plain hop is not a trick: "Big Air" needs real height or hang time
     if (!name && (spinName === 'Air' || (air.t > 0.75 && (info.height > 1.6 || air.t > 1.1)))) name = air.vert ? 'Air' : 'Big Air';
-    if (info.fakie) { name = (name ? name + ' to Fakie' : 'Fakie'); pts += 50; }
+    // landing fakie only counts when you didn't start that way
+    if (info.fakie && !info.fakieStart && name) { name += ' to Fakie'; pts += 50; }
     // air bonus
     if (air.t > 0.6) pts += Math.round((air.t - 0.6) * 220);
     if (info.height > 2) pts += Math.round((info.height - 2) * 60);

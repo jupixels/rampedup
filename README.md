@@ -35,7 +35,7 @@ Share `?room=CODE` links to drop friends straight into your session.
 - **Music** — a generated lo-fi soundtrack that never quite repeats, muffled while paused.
 - **Photo mode** (P) — freeze the moment, fly the camera, change the light and lens, hide the rider, and save a PNG.
 - **Settings** — separate music and effects volume, camera distance, field of view, mouse sensitivity, invert, reduce motion, mph, minimap toggle.
-- **Controls** — keyboard, gamepad (standard layout, including menu navigation) and touch.
+- **Controls** — keyboard, gamepad (standard layout, including menu navigation) and touch. Every key and button can be rebound in Settings, and on-screen prompts follow the device you are using.
 
 ## New to BMX games?
 
@@ -47,14 +47,16 @@ Pick **Tutorial** in the main menu for a 14-step guided run (pedal, hop, air, sp
 |---|---|---|
 | Pedal / brake | W / S | RT / LT |
 | Steer · spin in the air | A / D | Left stick |
-| Front / back flip (air) | W / S | Left stick ↑ / ↓ |
+| Front / back flip (press once airborne) | W / S | Left stick ↑ / ↓ |
 | Bunny hop (hold, release) | Space | A |
-| Manual (balance with W/S) | Shift | LB |
+| Manual (balance with W/S; hold S for a nose manual) | Shift | LB |
+| Revert out of fakie | S (tap) | LT / stick ↓ (tap) |
 | Barspin · Tailwhip | J · K | X · Y |
 | Superman · No Hander · Can Can | L · U · I | B · RB · D-pad ← |
 | Table Top · No Footer | O · H | D-pad ↓ · ↑ |
 | Start course / take lift | E | D-pad → |
-| Reset to last safe spot | R | Back |
+| Back to last gate / safe spot | R | Back |
+| Restart course | Backspace | pause menu |
 | Camera · Map | C · M | Right stick click · Left stick click |
 | Chat · Riders | T · Tab | — |
 | Photo mode | P | — |

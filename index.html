@@ -135,6 +135,11 @@
       <label class="field">Field of view <input type="range" min="50" max="80" step="1" data-bind="fov" id="set-fov"></label>
       <label class="field">Mouse look sensitivity <input type="range" min="0.3" max="2.5" step="0.1" data-bind="sens" id="set-sens"></label>
       <label class="check"><input type="checkbox" data-bind="invert" id="set-invert"> Invert camera up/down</label>
+      <label class="check"><input type="checkbox" data-bind="classic" id="set-classic"> Classic controls (flips and manuals react to keys you are already holding, no fakie riding)</label>
+      <h3>Key and button bindings</h3>
+      <p class="muted small">Click a binding, then press the new key or gamepad button. Esc cancels.</p>
+      <div class="bind-list" data-bind="binds"></div>
+      <div class="row"><button class="btn small ghost" data-action="resetbinds"><span>Reset bindings</span></button></div>
       <h3>Display</h3>
       <label class="check"><input type="checkbox" data-bind="reduce" id="set-reduce"> Reduce motion (no shake, slow-mo or dips)</label>
       <label class="check"><input type="checkbox" data-bind="mph" id="set-mph"> Show speed in mph</label>
@@ -158,13 +163,13 @@
       <div class="ctrl-grid">
         <div><kbd>W</kbd> pedal · <kbd>S</kbd> brake</div><div>RT / LT</div>
         <div><kbd>A</kbd> <kbd>D</kbd> steer · spin in the air</div><div>Left stick</div>
-        <div><kbd>W</kbd> / <kbd>S</kbd> in the air: front / back flip</div><div>Left stick ↑ ↓</div>
+        <div><kbd>W</kbd> / <kbd>S</kbd> pressed in the air: front / back flip</div><div>Left stick ↑ ↓</div>
         <div>Hold &amp; release <kbd>Space</kbd>: bunny hop</div><div>A</div>
-        <div><kbd>Shift</kbd> manual, balance with <kbd>W</kbd>/<kbd>S</kbd></div><div>LB</div>
+        <div><kbd>Shift</kbd> manual (hold <kbd>S</kbd> too for a nose manual), balance with <kbd>W</kbd>/<kbd>S</kbd></div><div>LB</div>
         <div><kbd>J</kbd> barspin · <kbd>K</kbd> tailwhip</div><div>X · Y</div>
         <div><kbd>L</kbd> superman · <kbd>U</kbd> no hander · <kbd>I</kbd> can can</div><div>B · RB · D-pad ←</div>
         <div><kbd>O</kbd> table top · <kbd>H</kbd> no footer</div><div>D-pad ↓ ↑</div>
-        <div><kbd>E</kbd> start course / take lift · <kbd>R</kbd> reset</div><div>D-pad → · Back</div>
+        <div><kbd>E</kbd> start course / take lift · <kbd>R</kbd> last gate or safe spot · <kbd>Backspace</kbd> restart course</div><div>D-pad → · Back · pause menu</div>
         <div><kbd>C</kbd> camera · <kbd>M</kbd> map · <kbd>P</kbd> photo mode · <kbd>T</kbd> chat · <kbd>Tab</kbd> riders</div><div>R3 camera · L3 map</div>
         <div>Drag the mouse to look around</div><div>Right stick</div>
       </div>
@@ -182,7 +187,7 @@
       <h3 id="g-tricks">Tricks</h3>
       <div class="trick-grid">
         <div><b>Spins</b><span>180 · 360 · 540… hold A/D in the air</span><em>100 – 5,000</em></div>
-        <div><b>Backflip / Frontflip</b><span>hold S / W in the air, release when upright</span><em>1,000 / 1,300</em></div>
+        <div><b>Backflip / Frontflip</b><span>press S / W once you are in the air, release when upright</span><em>1,000 / 1,300</em></div>
         <div><b>Barspin</b><span>J, tap twice for a double</span><em>350</em></div>
         <div><b>Tailwhip</b><span>K, the frame whips around the bars</span><em>700</em></div>
         <div><b>Superman</b><span>L, hold to stretch it out</span><em>450 + hold</em></div>
@@ -197,7 +202,9 @@
       <ul class="guide-list">
         <li>Land on any <b>rail, ledge, pipe or handrail</b> roughly lined up with it and you lock on. What you hold as you lock on picks the grind: nothing for a Double Peg, W for an Icepick, S for a Feeble, A/D for a Smith.</li>
         <li>Keep the <b>balance meter</b> green with A/D. Hop off with Space for extra pop, or ride off the end.</li>
-        <li><b>Manual</b>: hold Shift while rolling and keep the meter centred with W/S. Holding Shift as you land drops you straight into one.</li>
+        <li><b>Manual</b>: hold Shift while rolling and keep the meter centred with W/S. Holding Shift as you land drops you straight into one. Hold S as you start it for a nose manual.</li>
+        <li><b>Fakie</b>: land an air backwards and you keep rolling backwards. Tap S for a <b>revert</b>, or hop and spin 180 for a <b>Half Cab</b>. Tricks out of fakie score 15% more.</li>
+        <li><b>Flips need a fresh press</b>: a key you were already holding at take-off (usually W) is ignored until you let it go, so pedalling off a lip is safe.</li>
       </ul>
 
       <h3 id="g-combos">Combos &amp; bails</h3>
@@ -299,6 +306,7 @@
         <button data-panel="settings">Settings</button>
         <button data-panel="controls">Guide</button>
         <button data-action="photo">Photo mode</button>
+        <button data-action="restartcourse" class="hidden" id="btn-restartcourse">Restart course</button>
         <button data-action="quitcourse" class="hidden" id="btn-quitcourse">Quit course</button>
         <button data-action="quitmenu">Quit to title</button>
       </nav>
@@ -323,22 +331,27 @@
   <section id="touch" class="hidden">
     <div class="stick" id="stick"><i></i></div>
     <div class="tbtns">
-      <button data-t="hop" class="t-hop">HOP</button>
-      <button data-t="manual" class="t-man">MANUAL</button>
       <button data-t="barspin">BAR</button>
       <button data-t="tailwhip">WHIP</button>
       <button data-t="superman">SUPER</button>
       <button data-t="nohander">NO HAND</button>
+      <button data-t="hop" class="t-hop">HOP</button>
+      <button data-t="cancan">CAN</button>
+      <button data-t="tabletop">TABLE</button>
+      <button data-t="nofooter">NO FOOT</button>
+      <button data-t="manual" class="t-man">MANUAL</button>
     </div>
     <div class="ttop">
       <button data-b="pausePressed">II</button>
       <button data-b="resetPressed">↺</button>
       <button data-b="camPressed">CAM</button>
-      <button data-b="interactPressed">E</button>
+      <button data-b="mapPressed">MAP</button>
+      <button data-b="interactPressed">GO</button>
       <button data-auto="1" class="t-auto">AUTO</button>
     </div>
   </section>
 
+  <div id="rotate"><b>Turn your phone sideways</b><span>Ramped Up plays in landscape.</span></div>
   <noscript><p class="noscript">Ramped Up needs JavaScript and WebGL.</p></noscript>
   <script type="module" src="js/main.js"></script>
 </body>
