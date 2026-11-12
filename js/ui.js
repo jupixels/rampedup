@@ -120,6 +120,10 @@ export class UI {
         break;
       }
       case 'race': g.net.startRace(b.dataset.course); g.setPaused(false); break;
+      case 'bikestart': if (g.bike.start()) g.setPaused(false); break;
+      case 'bikestop': g.bike.stop(); this.renderMp(); break;
+      case 'gotoplayer': g.gotoPlayer(b.dataset.id); break;
+      case 'watchplayer': g.spectate(b.dataset.id); break;
       case 'course': {
         const c = g.courses.list.find((x) => x.id === b.dataset.course);
         if (!g.playing) g.startRiding();
@@ -139,7 +143,7 @@ export class UI {
     } catch (e) {
       console.warn(e);
       const t = e && e.type;
-      this.mpMsg(t === 'peer-unavailable' ? 'Room not found' : t === 'unavailable-id' ? 'That room code is taken' : t === 'browser-incompatible' ? 'Your browser does not support WebRTC' : 'Could not connect. Check your network and try again.');
+      this.mpMsg(t === 'room-full' ? 'That room is full' : t === 'peer-unavailable' ? 'Room not found' : t === 'unavailable-id' ? 'That room code is taken' : t === 'browser-incompatible' ? 'Your browser does not support WebRTC' : 'Could not connect. Check your network and try again.');
     }
     this.panelEl && this.panelEl.querySelectorAll('.btn').forEach((x) => (x.disabled = false));
     this.renderMp();
@@ -185,6 +189,26 @@ export class UI {
         b.innerHTML = `<span>Race: ${c.name}</span>`;
         list.appendChild(b);
       }
+    }
+    // riders in the room: ride over to them or watch them
+    const riders = p.querySelector('[data-bind=riders]');
+    riders.textContent = '';
+    riders.classList.toggle('hidden', !on || !net.players.size);
+    if (on) for (const rp of net.players.values()) {
+      const row = document.createElement('div'); row.className = 'rider-row';
+      const dot = document.createElement('i'); dot.style.background = safeColor(rp.colors.frame, '#ffffff');
+      const nm = document.createElement('span'); nm.textContent = rp.name;
+      const mk = (label, action) => { const b = document.createElement('button'); b.className = 'btn small'; b.dataset.action = action; b.dataset.id = rp.id; const s = document.createElement('span'); s.textContent = label; b.appendChild(s); return b; };
+      row.append(dot, nm, mk('Go to', 'gotoplayer'), mk('Watch', 'watchplayer'));
+      riders.appendChild(row);
+    }
+    const bk = p.querySelector('[data-bind=bikehost]');
+    bk.classList.toggle('hidden', !(on && net.isHost));
+    if (on && net.isHost) {
+      const b = bk.querySelector('button');
+      b.dataset.action = this.game.bike.active ? 'bikestop' : 'bikestart';
+      b.firstElementChild.textContent = this.game.bike.active ? 'Stop Game of BIKE' : 'Start Game of BIKE';
+      b.disabled = !this.game.bike.active && net.players.size < 1;
     }
     const params = new URLSearchParams(location.search);
     const inp = p.querySelector('[data-bind=code]');
@@ -636,6 +660,13 @@ export class UI {
         el.hints.textContent = '';
         for (const [k, t] of items) { if (!k) continue; const sp = document.createElement('span'); const kb = document.createElement('kbd'); kb.textContent = k; sp.append(kb, ' ' + t); el.hints.appendChild(sp); }
       }
+    }
+    // Game of BIKE banner
+    if (this.frame % 6 === 0) {
+      const be = this.bikeEl || (this.bikeEl = document.getElementById('hud-bike'));
+      const h = g.bike.hud();
+      cls(be, 'hidden', !h);
+      if (h) { set(be.children[0], h.line); set(be.children[1], h.board); cls(be, 'out', h.out); }
     }
     // prompt
     const pr = g.promptText();

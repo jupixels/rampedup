@@ -21,6 +21,7 @@ import { FX } from './fx.js';
 import { Progress } from './progress.js';
 import { PhotoMode } from './photo.js';
 import { Goals } from './goals.js';
+import { BikeGame } from './bike.js';
 import { ZONES, SPAWN } from './layout.js';
 import { store, clamp } from './util.js';
 
@@ -167,6 +168,7 @@ class Game {
     this.courses = new Courses(this);
     dbg('courses');
     this.net = new Net(this);
+    this.bike = new BikeGame(this);
     this.tutorial = new Tutorial(this);
     this.fx = new FX(this.scene);
     this.fx.setScale(window.innerHeight * Math.min(window.devicePixelRatio || 1, this.q.pr));
@@ -280,6 +282,34 @@ class Game {
     this.ui.toast(`Race: ${c.name} — get ready!`);
   }
 
+  // ---- multiplayer: go to a friend, or watch them ride ----
+  gotoPlayer(id) {
+    const rp = this.net.players.get(id);
+    if (!rp) return;
+    const q = rp.model.root.position;
+    if (!this.playing) this.startRiding();
+    this.setPaused(false);
+    this.teleport(q.x + 1.5, q.z + 1.5, null, true);
+    this.ui.toast(`Rode over to ${rp.name}`);
+  }
+  spectate(id) {
+    const rp = this.net.players.get(id);
+    if (!rp) return;
+    if (this.courses.run) this.courses.cancel(true);
+    if (!this.playing) this.startRiding();
+    this.setPaused(false);
+    this.spectating = id;
+    this.player.frozen = true;
+    this.specView = { pos: rp.model.root.position, vel: new THREE.Vector3(), heading: 0, visHeading: 0, speed: 0, mode: 'ground', air: null, bail: null, fakie: false, model: rp.model };
+    this.ui.toast(`Watching ${rp.name}. Press ${this.input.label('hop') || 'HOP'} to stop`);
+  }
+  stopSpectating() {
+    if (!this.spectating) return;
+    this.spectating = null; this.specView = null;
+    this.player.frozen = false;
+    this.cam.snap(this.player);
+  }
+
   // R / Back: hop back to the last safe spot. During a gate course that is the last gate you
   // passed (the clock keeps running).
   resetRider() {
@@ -324,6 +354,7 @@ class Game {
   onTrickEvent(e) {
     this.tutorial?.onTrick(e);
     if (e.type === 'land' && e.name) {
+      this.bike.reportLanding(e.name, e.pts);
       if (e.pts >= 600) this.audio.play('trick', { volume: 0.8 });
       this.ui.feed(`${e.name}  +${e.pts.toLocaleString()}`);
     }
@@ -462,7 +493,18 @@ class Game {
         this.fx.update(dt, p);
       }
       this.tutorial.update(dt);
-      this.cam.update(dt, p, this.paused ? { orbitX: 0, orbitY: 0 } : input);
+      if (this.spectating) {
+        // follow the other rider: heading and speed come from their latest snapshot
+        const rp = this.net.players.get(this.spectating), v = this.specView;
+        if (!rp || input.hopPressed || input.resetPressed) this.stopSpectating();
+        else {
+          const f = new THREE.Vector3(0, 0, 1).applyQuaternion(rp.model.root.quaternion);
+          v.heading = v.visHeading = Math.atan2(f.x, f.z);
+          const last = rp.buf[rp.buf.length - 1];
+          v.speed = last ? last.d[21] || 0 : 0;
+        }
+      }
+      this.cam.update(dt, this.spectating ? this.specView : p, this.paused ? { orbitX: 0, orbitY: 0 } : input);
       this.ui.update(dt);
     } else {
       // menu: slow cinematic orbit over The Yard

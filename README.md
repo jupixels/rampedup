@@ -28,7 +28,7 @@ Share `?room=CODE` links to drop friends straight into your session.
 - **Tricks & combos** — 180–1440 spins, front and back flips (doubles too), barspins, tailwhips, supermans, no-handers, can-cans, table tops and no-footers, plus five variations (X-up, turndown, tuck no-hander, seat grab, one-footer), lip tricks on coping, wallrides, fakie tricks and real names for classic combos (Truckdriver, Flipwhip, Flair…). Hold the button to extend a pose. Chain airs, grinds and manuals to build the multiplier; bail and the combo is gone.
 - **Obstacle courses** — five timed gate courses plus two score-attack modes, bronze/silver/gold medals, personal bests, and a **ghost** of your best run to race.
 - **Things to do everywhere** — 35 spot goals (five per spot, each revealed when you finish the one before), 29 named gaps to find, three daily challenges that are the same for every rider, 18 challenges, and **38 golden sprockets** that only appear on the map once you have been near them. A stats page keeps lifetime totals. Progress is saved in your browser.
-- **Multiplayer** — peer-to-peer over WebRTC (PeerJS), so it works on static hosting. Quick Join a public room or host a private one with a 5-letter code. See other riders live with name tags, chat, a scoreboard, a trick feed, and **host-started races** with synced countdowns and results. If the host leaves, someone else takes over the room.
+- **Multiplayer** — peer-to-peer over WebRTC (PeerJS), so it works on static hosting. Quick Join a public room (rooms hold 8; when one fills, the next opens) or host a private one with a 5-letter code. See other riders live with name tags, chat, a scoreboard and a trick feed; ride over to a friend or watch them; play **Game of BIKE**; and run **host-started races** with synced countdowns and host-checked times. If the host leaves, someone else takes over the room.
 - **Looks** — physically based materials with procedurally generated textures, a physical sky with four times of day, soft sun shadows, image-based lighting, GPU grass that sways in the wind, thousands of instanced trees, water, clouds, bloom, optional ambient occlusion, and filmic tone mapping. Resolution scales automatically to keep the frame rate up.
 - **Feel** — dust kicked up on landings and dirt, sparks off grinds, splashes, skid marks, confetti, a landing camera dip, a camera that pulls back on big airs, and a Perfect Landing bonus for smooth landings.
 - **Progression** — XP from combos, courses, sprockets, challenges and the tutorial. Levels unlock paint jobs (raw steel, matte, chrome, gold, oil slick), rims, tyres, bars and helmets, and from level 16 pegs, seats, grips, shoes and gloves.
@@ -98,7 +98,7 @@ python3 -m http.server 8000
 ## Multiplayer notes
 
 - Signalling uses the free public PeerJS server; game traffic then goes directly between players over WebRTC.
-- The host relays positions to everyone else, so a room works best with up to about 8 riders.
+- The host relays positions to everyone else, so rooms are capped at 8 riders. Positions travel on a second, unordered channel so one delayed packet does not hold up the rest.
 - Some strict corporate or mobile networks block peer-to-peer connections. If a friend can't connect, try another network.
 - To use your own signalling server ([peerjs-server](https://github.com/peers/peerjs-server)), add `?peerhost=your.host&peerport=443&peerpath=/` to the URL.
 
@@ -124,6 +124,7 @@ js/tricks.js        trick naming, scoring and combos
 js/courses.js       courses, ghosts, golden sprockets, challenges
 js/goals.js         spot goals, named gaps, daily challenges
 js/network.js       PeerJS multiplayer
+js/bike.js          Game of BIKE
 js/ui.js            menus, HUD, minimap, map, chat, touch controls
 js/audio.js         sound effects + procedural tyre/wind/freewheel layers
 js/textures.js      procedural PBR textures (no image assets), built in Web Workers

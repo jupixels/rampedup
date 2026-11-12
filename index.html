@@ -73,6 +73,12 @@
         <button class="btn small" data-action="copylink">Copy invite link</button>
         <button class="btn small ghost" data-action="leave">Leave</button>
       </div>
+      <div class="rider-list hidden" data-bind="riders"></div>
+      <div class="race-host hidden" data-bind="bikehost">
+        <h3>Game of BIKE (host)</h3>
+        <p class="muted small">One rider sets a trick, everyone else must land the same trick or take a letter. Spell B-I-K-E and you are out.</p>
+        <div class="row"><button class="btn small" data-action="bikestart"><span>Start Game of BIKE</span></button></div>
+      </div>
       <div class="race-host hidden" data-bind="racehost">
         <h3>Start a race (host)</h3>
         <div class="race-list" data-bind="racelist"></div>
@@ -266,6 +272,7 @@
     <div class="hud-tl">
       <div class="zone" id="hud-zone">The Yard</div>
       <div class="goal" id="hud-goal"></div>
+      <div class="bike hidden" id="hud-bike"><b></b><span></span></div>
       <div class="speed"><b id="hud-speed">0</b><small>km/h</small></div>
       <div class="score">Score <b id="hud-score">0</b></div>
       <div class="level"><span id="hud-level">Lv 1</span><i><b id="hud-xp"></b></i></div>

@@ -508,4 +508,145 @@ export const CASES = [
       return { ok, detail: JSON.stringify(out) };
     },
   },
+  // ---------------- phase 5: multiplayer (no real network: connections are faked) ----------------
+  {
+    name: 'multiplayer: Quick Join moves on to the next public room when one is full',
+    run: async () => {
+      const net = window.__game.net;
+      const realJoin = net.join, realHost = net.host;
+      const tried = [];
+      net.join = async (code) => { tried.push('join ' + code); if (code === 'PUBLIC') throw Object.assign(new Error('full'), { type: 'room-full' }); if (code === 'PUBLIC2') throw Object.assign(new Error('x'), { type: 'peer-unavailable' }); return code; };
+      net.host = async (code) => { tried.push('host ' + code); return code; };
+      let got; try { got = await net.quickJoin(); } catch (e) { got = 'threw ' + e.type; }
+      net.join = realJoin; net.host = realHost;
+      return { ok: got === 'PUBLIC2' && tried.join(',') === 'join PUBLIC,join PUBLIC2,host PUBLIC2', detail: `${got} via ${tried.join(',')}` };
+    },
+  },
+  {
+    name: 'multiplayer: snapshots use the unordered channel, and late ones are dropped',
+    run: () => {
+      const g = window.__game, net = g.net;
+      const mk = (peer) => { const c = { peer, open: true, sent: [], send(m) { this.sent.push(m); } }; return c; };
+      const a = mk('peer-a'), b = mk('peer-b'), bState = mk('peer-b');
+      const was = { isHost: net.isHost, status: net.status, myId: net.myId };
+      net.isHost = true; net.status = 'host'; net.myId = 'me';
+      for (const c of [a, b]) { net.conns.set(c.peer, c); net.onMessage({ t: 'hello', name: c.peer, colors: {} }, c); }
+      net.stateConns.set('peer-b', bState);
+      const d = g.player.snapshot();
+      net.onMessage({ t: 's', n: 5, d }, a);
+      net.onMessage({ t: 's', n: 3, d }, a);   // older: must be ignored
+      net.onMessage({ t: 's', n: 6, d }, a);
+      const pa = net.players.get('peer-a');
+      const relayedOnState = bState.sent.filter((m) => m.t === 's' && m.id === 'peer-a').length;
+      const relayedOnMain = b.sent.filter((m) => m.t === 's').length;
+      const ok = pa.buf.length === 2 && pa.lastN === 6 && relayedOnState === 2 && relayedOnMain === 0;
+      for (const id of ['peer-a', 'peer-b']) net.removePlayer(id, true);
+      net.conns.clear(); net.stateConns.clear(); Object.assign(net, was);
+      return { ok, detail: `kept=${pa.buf.length} lastN=${pa.lastN} relayed state=${relayedOnState} main=${relayedOnMain}` };
+    },
+  },
+  {
+    name: 'multiplayer: the host corrects a race time that does not match its own clock',
+    run: () => {
+      const g = window.__game, net = g.net;
+      const was = { isHost: net.isHost, status: net.status, myId: net.myId };
+      net.isHost = true; net.status = 'host'; net.myId = 'me';
+      const c = { peer: 'peer-a', open: true, send() {} };
+      net.conns.set('peer-a', c); net.onMessage({ t: 'hello', name: 'Cheater', colors: {} }, c);
+      net.raceResults = { course: 'yard', list: [], startAt: Date.now() - 40000 };
+      net.onMessage({ t: 'fin', course: 'yard', time: 5 }, c);       // claims 5 s, 40 s after GO
+      const t = net.raceResults.list[0] && net.raceResults.list[0].time;
+      net.raceResults = { course: 'yard', list: [], startAt: Date.now() - 40000 };
+      net.onMessage({ t: 'fin', course: 'yard', time: 39.4 }, c);    // honest: within lag
+      const t2 = net.raceResults.list[0] && net.raceResults.list[0].time;
+      net.removePlayer('peer-a', true); net.conns.clear(); net.raceResults = null; Object.assign(net, was);
+      document.getElementById('result').classList.add('hidden');
+      return { ok: Math.abs(t - 40) < 1 && t2 === 39.4, detail: `claimed 5 -> ${t && t.toFixed(1)}; claimed 39.4 -> ${t2}` };
+    },
+  },
+  {
+    name: 'Game of BIKE: set, match, letters, elimination and a winner',
+    run: () => {
+      const g = window.__game, net = g.net, bike = g.bike;
+      const was = { isHost: net.isHost, status: net.status, myId: net.myId };
+      const realNow = net.now; let clock = 1e6; net.now = () => clock;
+      net.isHost = true; net.status = 'host'; net.myId = 'me';
+      const sent = [];
+      for (const id of ['peer-a', 'peer-b']) { const c = { peer: id, open: true, send: (m) => sent.push(m) }; net.conns.set(id, c); net.onMessage({ t: 'hello', name: id === 'peer-a' ? 'Ana' : 'Ben', colors: {} }, c); }
+      const started = bike.start();
+      const s = bike.state, log = [];
+      const conn = (id) => net.conns.get(id);
+      // round 1: host sets; Ana matches, Ben runs out of time
+      bike.reportLanding('Truckdriver', 900);
+      log.push(s.phase + ':' + s.pending.join('+'));
+      net.onMessage({ t: 'bikeLand', name: '360', pts: 300 }, conn('peer-a'));          // wrong trick
+      net.onMessage({ t: 'bikeLand', name: 'Truckdriver', pts: 880 }, conn('peer-a'));  // match
+      clock += 41000; bike.update();
+      log.push(`B=${s.letters['peer-b']} setter=${s.setter}`);
+      // Ben fails three more times -> out; then Ana vs host until someone wins
+      let guard = 0;
+      while (s.phase !== 'over' && guard++ < 300) {
+        if (s.phase === 'set') { const id = s.setter; if (id === 'me') bike.reportLanding('Tailwhip', 700); else net.onMessage({ t: 'bikeLand', name: 'Tailwhip', pts: 700 }, conn(id)); }
+        else {
+          // the host always matches; nobody else does
+          if (s.pending.includes('me')) bike.reportLanding(s.trick.name, 700);
+          if (s.phase === 'match') { clock += 41000; bike.update(); }
+        }
+      }
+      const hud = bike.hud();
+      const ok = started && log[0] === 'match:peer-a+peer-b' && log[1] === 'B=1 setter=peer-a' && s.phase === 'over' && s.winner === 'me'
+        && s.letters['peer-a'] === 4 && s.letters['peer-b'] === 4 && sent.some((m) => m.t === 'bike') && hud && /You win/.test(hud.line);
+      for (const id of ['peer-a', 'peer-b']) net.removePlayer(id, true);
+      net.conns.clear(); bike.state = null; net.now = realNow; Object.assign(net, was);
+      return { ok, detail: `${log.join(' | ')} | end=${s.phase} winner=${s.winner} letters=${JSON.stringify(s.letters)} hud=${hud && hud.line}` };
+    },
+  },
+  {
+    name: 'Game of BIKE: a client rebuilds a safe state from the host broadcast',
+    run: () => {
+      const g = window.__game, net = g.net, bike = g.bike;
+      const was = { isHost: net.isHost, status: net.status, myId: net.myId };
+      net.isHost = false; net.status = 'client'; net.myId = 'me';
+      net.onMessage({ t: 'bike', id: 'host', s: { phase: 'match', order: ['host', 'me'], names: { host: '<img src=x onerror=1>', me: 'Me' }, letters: { host: 0, me: 2 }, setter: 'host', trick: { name: 'Flipwhip', pts: 2000 }, pending: ['me'], deadline: net.now() + 20000, msg: 'x' } }, { peer: 'host' });
+      const h = bike.hud();
+      const ok = !!h && /Match it: Flipwhip/.test(h.line) && h.mine === 'B I · ·' && !/[<>]/.test(h.board);
+      bike.state = null; Object.assign(net, was);
+      return { ok, detail: h ? `${h.line} | ${h.mine} | ${h.board}` : 'no hud' };
+    },
+  },
+  {
+    name: 'multiplayer: watching a rider freezes you and follows them; leaving restores control',
+    run: () => {
+      const g = window.__game, net = g.net, sim = window.__sim;
+      sim.reset();
+      const was = { isHost: net.isHost, status: net.status, myId: net.myId };
+      net.isHost = true; net.status = 'host'; net.myId = 'me';
+      const c = { peer: 'peer-a', open: true, send() {} };
+      net.conns.set('peer-a', c); net.onMessage({ t: 'hello', name: 'Ana', colors: {} }, c);
+      const rp = net.players.get('peer-a');
+      rp.model.root.position.set(20, g.world.anchors.yy, 20);
+      g.spectate('peer-a');
+      const frozen = g.player.frozen, following = g.specView && g.specView.pos === rp.model.root.position;
+      g.cam.update(1 / 60, g.specView, { orbitX: 0, orbitY: 0 }, true);
+      const near = g.camera.position.distanceTo(rp.model.root.position) < 12;
+      net.removePlayer('peer-a', true); // they left: we get our bike back
+      const restored = !g.spectating && !g.player.frozen;
+      net.conns.clear(); Object.assign(net, was);
+      return { ok: frozen && following && near && restored, detail: `frozen=${frozen} following=${following} camNear=${near} restored=${restored} cam=${g.camera.position.toArray().map((v) => v.toFixed(1))} mode=${g.cam.mode}` };
+    },
+  },
+  {
+    name: 'camera: resetting right after a hard landing does not throw the camera away',
+    run: () => {
+      const g = window.__game, p = g.player, sim = window.__sim;
+      sim.reset();
+      g.cam.addDip(1); g.cam.addShake(0.8);
+      g.cam.update(1 / 60, p, { orbitX: 0, orbitY: 0 });
+      g.cam.update(0.5, p, { orbitX: 0, orbitY: 0 });   // one very long frame
+      g.resetRider();
+      g.cam.update(1 / 60, p, { orbitX: 0, orbitY: 0 });
+      const d = g.camera.position.distanceTo(p.pos);
+      return { ok: isFinite(d) && d < 12, detail: `camera is ${d.toFixed(1)} m from the rider` };
+    },
+  },
 ];
