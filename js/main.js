@@ -325,7 +325,12 @@ class Game {
       this.camera.aspect = w / h;
       this.camera.updateProjectionMatrix();
     });
-    document.addEventListener('visibilitychange', () => { if (document.hidden && this.playing && !this.net.online) this.setPaused(true); });
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden && this.playing && !this.net.online) this.setPaused(true);
+      this.audio.setAway(document.hidden);
+    });
+    window.addEventListener('pagehide', () => this.audio.setAway(true));
+    window.addEventListener('pageshow', () => this.audio.setAway(document.hidden));
     this.tricks.on((e) => this.onTrickEvent(e));
   }
 
@@ -416,12 +421,12 @@ class Game {
     this.cam.snap(this.player);
   }
 
-  // Start a solo course over with a short countdown. A multiplayer race can't be restarted.
+  // Start a solo course over, with the full 3-2-1. A multiplayer race can't be restarted.
   restartCourse() {
     const r = this.courses.run;
     if (!r || r.opts.race) return;
     if (this.player.ragdoll) this.player.ragdoll.active = false;
-    this.courses.start(r.course, { countdownFrom: 1.2, restart: true });
+    this.courses.start(r.course, { restart: true });
   }
 
   zoneName() {

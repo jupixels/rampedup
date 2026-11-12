@@ -917,7 +917,8 @@ function buildChannel(B, A) {
   p.line(-0.8, (3 - 1.5 * (1 - Math.cos(0.8)) - 4 * (1 - Math.cos(0.8))) / Math.sin(0.8)).arc(4, -0.8, 0, 10).by(7, 0).arc(4, 0, 0.8, 10);
   p.line(0.8, (3 - 1.5 * (1 - Math.cos(0.8)) - p.end[1]) / Math.sin(0.8)).arc(1.5, 0.8, 0, 6).by(2.5, 0).down();
   const total = p.end[0];
-  B.ramp(p, { x: Z.x, z: Z.z - total / 2, y: yy, yaw: 0, width: 120, top: 'concreteSmooth', side: 'concreteDark', surface: 'concrete', tile: 3, sideTile: 3 });
+  // 3 cm proud of the slab: at the same height the two floors fought for the same pixels and flickered
+  B.ramp(p, { x: Z.x, z: Z.z - total / 2, y: yy + 0.03, yaw: 0, width: 120, top: 'concreteSmooth', side: 'concreteDark', surface: 'concrete', tile: 3, sideTile: 3 });
   // a hip and a rail in the channel floor
   B.ramp(profiles.kicker(1.1, 30), { x: Z.x - 20, z: Z.z, y: yy, yaw: Math.PI / 2, width: 3, top: 'concreteSmooth', side: 'concreteDark', surface: 'concrete', tile: 3 });
   B.rail(new THREE.Vector3(Z.x + 10, yy + 0.45, Z.z), new THREE.Vector3(Z.x + 30, yy + 0.45, Z.z), { mat: 'railRed' });
