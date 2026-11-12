@@ -1,7 +1,7 @@
 // DOM UI: menus, panels, HUD, minimap, big map, chat, touch controls.
 import { ZONES, FAST_TRAVEL, WORLD, LAKE } from './layout.js';
 import { CHALLENGES } from './courses.js';
-import { formatTime, clamp, store } from './util.js';
+import { formatTime, clamp, store, safeColor } from './util.js';
 import { TRICK_LIST } from './input.js';
 import { UNLOCKS, BASE, xpForLevel } from './progress.js';
 
@@ -96,7 +96,7 @@ export class UI {
       case 'quitmenu': g.quitToMenu(); break;
       case 'resetprogress': {
         if (b.dataset.armed) {
-          ['xp', 'best', 'medals', 'challenges', 'sprockets', 'tutorialDone'].forEach((k) => { try { localStorage.removeItem('rampedup.' + k); } catch (e) {} });
+          ['xp', 'best', 'medals', 'challenges', 'sprockets', 'tutorialDone', 'stats'].forEach((k) => { try { localStorage.removeItem('rampedup.' + k); } catch (e) {} });
           Object.keys(localStorage).filter((k) => k.startsWith('rampedup.ghost.')).forEach((k) => localStorage.removeItem(k));
           location.reload();
         } else { b.dataset.armed = '1'; b.innerHTML = '<span>Click again to erase everything</span>'; }
@@ -538,7 +538,7 @@ export class UI {
     const rows = [{ name: g.settings.name + ' (you)', score: g.tricks.total, color: g.settings.colors.frame }];
     for (const p of g.net.players.values()) rows.push({ name: p.name, score: p.score || 0, color: p.colors.frame });
     rows.sort((a, b) => b.score - a.score);
-    this.el.scoreboard.innerHTML = `<h3>${g.net.online ? 'Room ' + g.net.code : 'Session'}</h3><table>${rows.map((r) => `<tr><td><b style="color:${r.color}">■</b> ${esc(r.name)}</td><td>${r.score.toLocaleString()}</td></tr>`).join('')}</table>`;
+    this.el.scoreboard.innerHTML = `<h3>${g.net.online ? 'Room ' + g.net.code : 'Session'}</h3><table>${rows.map((r) => `<tr><td><b style="color:${safeColor(r.color, '#ffffff')}">■</b> ${esc(r.name)}</td><td>${r.score.toLocaleString()}</td></tr>`).join('')}</table>`;
   }
 
   toast(text, cls = '') {
@@ -664,7 +664,10 @@ export class UI {
   closeChat() { this.el.chatInput.classList.add('hidden'); this.el.chatInput.blur(); this.game.input.enabled = true; this.game.input.keys.clear(); }
   chatLine(name, text, color = '#fff') {
     const d = document.createElement('div');
-    d.innerHTML = `<b style="color:${color}">${esc(name)}</b>${esc(text)}`;
+    const b = document.createElement('b');
+    b.style.color = safeColor(color, '#ffffff');
+    b.textContent = name;
+    d.append(b, document.createTextNode(text));
     this.el.chatLog.appendChild(d);
     setTimeout(() => d.remove(), 12100);
     while (this.el.chatLog.children.length > 6) this.el.chatLog.firstChild.remove();

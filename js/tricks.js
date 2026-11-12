@@ -1,5 +1,6 @@
 // Trick naming, scoring and combo chaining.
 import { TRICK_ANIMS } from './player.js';
+import { store } from './util.js';
 
 const SPIN_PTS = { 180: 100, 360: 300, 540: 650, 720: 1100, 900: 1800, 1080: 2700, 1260: 3800, 1440: 5000 };
 const FLIP_NAMES = { 1: 'Backflip', 2: 'Double Backflip', 3: 'Triple Backflip' };
@@ -14,7 +15,11 @@ export class Tricks {
     this.combo = null;
     this.idle = 0;
     this.feed = []; // recent notable landings
-    this.stats = { maxAir: 0, maxHeight: 0, grindDist: 0, manualTime: 0, bails: 0, flips: 0, longestCombo: 0, maxSpin: 0 };
+    // lifetime stats: saved between sessions
+    this.stats = { maxAir: 0, maxHeight: 0, grindDist: 0, manualTime: 0, maxManual: 0, bails: 0, flips: 0, longestCombo: 0, maxSpin: 0, best: 0, lifetime: 0, combos: 0 };
+    const saved = store('stats');
+    if (saved && typeof saved === 'object') for (const k of Object.keys(this.stats)) if (typeof saved[k] === 'number' && isFinite(saved[k])) this.stats[k] = saved[k];
+    this.best = this.stats.best;
     this.onBank = null;
     this.listeners = [];
   }
@@ -78,7 +83,8 @@ export class Tricks {
     if (flipName) names.push(flipName);
     names.push(...animNames);
     let name = names.join(' ');
-    if (!name && (spinName === 'Air' || air.t > 0.75)) name = air.vert ? 'Air' : 'Big Air';
+    // a plain hop is not a trick: "Big Air" needs real height or hang time
+    if (!name && (spinName === 'Air' || (air.t > 0.75 && (info.height > 1.6 || air.t > 1.1)))) name = air.vert ? 'Air' : 'Big Air';
     if (info.fakie) { name = (name ? name + ' to Fakie' : 'Fakie'); pts += 50; }
     // air bonus
     if (air.t > 0.6) pts += Math.round((air.t - 0.6) * 220);
@@ -123,6 +129,7 @@ export class Tricks {
     const p = dt * 160;
     c.manual.pts += p; c.base += p;
     this.stats.manualTime += dt;
+    this.stats.maxManual = Math.max(this.stats.maxManual, c.manual.time);
     this.idle = 0;
   }
   manualEnd(clean) {
@@ -137,6 +144,7 @@ export class Tricks {
 
   bail(reason) {
     this.stats.bails++;
+    this.saveStats();
     if (this.combo && this.combo.parts.length) this.fire({ type: 'comboLost', combo: this.combo, reason });
     else this.fire({ type: 'bail', reason });
     this.combo = null;
@@ -161,9 +169,13 @@ export class Tricks {
     this.total += score;
     this.best = Math.max(this.best, score);
     this.stats.longestCombo = Math.max(this.stats.longestCombo, c.parts.length);
+    this.stats.best = this.best; this.stats.lifetime += score; this.stats.combos++;
+    this.saveStats();
     const label = c.parts.map((p) => p.name).join(' + ');
     this.fire({ type: 'bank', score, mult, base: Math.round(c.base), label, parts: c.parts });
   }
+
+  saveStats() { store('stats', this.stats); }
 
   comboText() {
     const c = this.combo;

@@ -4,6 +4,9 @@
 import * as THREE from 'three';
 import { RiderBike } from './bikeModel.js';
 import { applySnapshot } from './courses.js';
+import { safeColors, safeName, safeText, safeNumber, disposeTree } from './util.js';
+
+const MAX_PLAYERS = 8; // the host relays everything, so rooms are capped
 
 const PREFIX = 'rampedup-v1-';
 const PUBLIC = 'PUBLIC';
@@ -38,7 +41,7 @@ export class Net {
 
   profile() {
     const s = this.game.settings;
-    return { name: s.name, colors: s.colors };
+    return { name: safeName(s.name), colors: safeColors(s.colors) };
   }
 
   makePeer(id) {
@@ -159,6 +162,9 @@ export class Net {
     switch (m.t) {
       case 'hello': {
         if (!this.isHost) return;
+        if (this.players.has(conn.peer)) return;
+        if (this.players.size + 1 >= MAX_PLAYERS) { try { conn.send({ t: 'full' }); } catch (e) {} setTimeout(() => { try { conn.close(); } catch (e) {} }, 300); return; }
+        m.name = safeName(m.name); m.colors = safeColors(m.colors);
         const list = [{ id: this.myId, ...this.profile(), score: this.game.tricks.total }];
         for (const [id, p] of this.players) list.push({ id, name: p.name, colors: p.colors, score: p.score });
         conn.send({ t: 'welcome', you: conn.peer, players: list, hostTime: Date.now() });
@@ -166,11 +172,17 @@ export class Net {
         this.broadcast({ t: 'join', id: conn.peer, name: m.name, colors: m.colors }, conn.peer);
         break;
       }
-      case 'welcome':
-        for (const p of m.players) if (p.id !== this.myId) this.addPlayer(p.id, p.name, p.colors, p.score, true);
-        this.game.ui.toast(`Joined room ${this.code} · ${m.players.length + 0} riders`);
+      case 'welcome': {
+        const list = Array.isArray(m.players) ? m.players.slice(0, MAX_PLAYERS) : [];
+        for (const p of list) if (p && typeof p.id === 'string' && p.id !== this.myId) this.addPlayer(p.id, p.name, p.colors, p.score, true);
+        this.game.ui.toast(`Joined room ${this.code} · ${list.length} riders`);
         break;
-      case 'join': if (m.id !== this.myId) this.addPlayer(m.id, m.name, m.colors); break;
+      }
+      case 'full':
+        this.game.ui.toast('That room is full');
+        this.leave();
+        break;
+      case 'join': if (typeof m.id === 'string' && m.id !== this.myId) this.addPlayer(m.id, m.name, m.colors); break;
       case 'leave': this.removePlayer(m.id); break;
       case 'ping': if (this.isHost) conn.send({ t: 'pong', c: m.c, h: Date.now() }); break;
       case 'pong': {
@@ -183,6 +195,7 @@ export class Net {
       case 's': {
         const id = this.isHost ? conn.peer : m.id;
         const p = this.players.get(id);
+        if (!Array.isArray(m.d) || m.d.length < 22 || m.d.length > 40 || !m.d.every((v) => typeof v === 'number' && isFinite(v))) break;
         if (p) { p.buf.push({ t: performance.now(), d: m.d }); if (p.buf.length > 30) p.buf.shift(); p.lastSeen = performance.now(); }
         if (this.isHost) this.broadcast({ t: 's', id, d: m.d }, id);
         break;
@@ -190,13 +203,17 @@ export class Net {
       case 'chat': case 'feed': case 'score': {
         const id = this.isHost ? conn.peer : m.id;
         const p = this.players.get(id);
-        if (m.t === 'chat') this.game.ui.chatLine(p ? p.name : '?', m.text, p ? p.colors.frame : '#fff');
-        if (m.t === 'feed' && p) this.game.ui.feed(`${p.name} ${m.text}`);
-        if (m.t === 'score' && p) p.score = m.total;
+        if (!p) break;
+        if (m.t === 'chat') { m.text = safeText(m.text); if (m.text) this.game.ui.chatLine(p.name, m.text, p.colors.frame); }
+        if (m.t === 'feed') { m.text = safeText(m.text, 80); this.game.ui.feed(`${p.name} ${m.text}`); }
+        if (m.t === 'score') { m.total = safeNumber(m.total, 0, 1e9); p.score = m.total; }
         if (this.isHost) this.broadcast({ ...m, id }, id);
         break;
       }
       case 'race':
+        if (this.isHost) break; // only the host starts races
+        if (!this.game.courses.list.some((c) => c.id === m.course && c.type === 'gates')) break;
+        m.startAt = safeNumber(m.startAt, 0, this.now() + 30000, this.now() + 6000);
         this.raceResults = { course: m.course, list: [] };
         this.game.startRace(m.course, m.startAt);
         break;
@@ -205,10 +222,13 @@ export class Net {
         this.recordFinish(conn.peer, m.course, m.time);
         break;
       }
-      case 'results':
-        this.raceResults = m;
-        this.game.ui.raceResults(m);
+      case 'results': {
+        if (this.isHost || !Array.isArray(m.list)) break;
+        const list = m.list.slice(0, MAX_PLAYERS).map((r) => ({ id: String(r && r.id), name: safeName(r && r.name, '?'), time: safeNumber(r && r.time, 0, 36000) }));
+        this.raceResults = { course: String(m.course), list };
+        this.game.ui.raceResults(this.raceResults);
         break;
+      }
     }
   }
 
@@ -218,6 +238,7 @@ export class Net {
 
   addPlayer(id, name, colors, score = 0, quiet = false) {
     if (this.players.has(id) || id === this.myId) return;
+    name = safeName(name); colors = safeColors(colors); score = safeNumber(score, 0, 1e9);
     const model = new RiderBike(colors);
     model.setNameTag(name, colors.frame);
     this.game.scene.add(model.root);
@@ -230,6 +251,7 @@ export class Net {
     const p = this.players.get(id);
     if (!p) return;
     this.game.scene.remove(p.model.root);
+    p.model.dispose?.();
     this.players.delete(id);
     if (!quiet) this.game.ui.netStatus();
   }
@@ -268,6 +290,8 @@ export class Net {
     if (!r || r.course !== course) return;
     const name = id === this.myId ? this.game.settings.name : (this.players.get(id) || {}).name || '?';
     if (r.list.some((x) => x.id === id)) return;
+    time = safeNumber(time, 0, 36000, NaN);
+    if (!isFinite(time)) return;
     r.list.push({ id, name, time });
     r.list.sort((a, b) => a.time - b.time);
     const msg = { t: 'results', course, list: r.list };

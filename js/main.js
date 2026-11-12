@@ -269,6 +269,14 @@ class Game {
     this.ui.toast(`Race: ${c.name} — get ready!`);
   }
 
+  // R / Back: restart a solo course, otherwise hop back to the last safe spot.
+  // In a multiplayer race the clock is shared, so we only put you back at the last gate.
+  resetRider() {
+    const r = this.courses.run;
+    if (r && r.state === 'running' && !r.opts.race) this.courses.start(r.course, {});
+    else if (!r || r.state === 'running') { this.player.respawnSafe(); this.cam.snap(this.player); }
+  }
+
   zoneName() {
     const p = this.player.pos;
     for (const z of Object.values(ZONES)) if (Math.abs(p.x - z.x) < z.hx + 10 && Math.abs(p.z - z.z) < z.hz + 10) return z.name;
@@ -364,7 +372,7 @@ class Game {
     p.events.length = 0;
   }
 
-  // Keep the frame rate up by lowering render resolution. Only ever steps down, and rarely,
+  // Keep the frame rate up by lowering render resolution. Steps down quickly and back up cautiously,
   // because every resize reallocates render targets.
   adaptResolution(rawDt) {
     if (!this.playing || this.paused) return;
@@ -376,9 +384,14 @@ class Game {
     const avg = P.acc / P.n;
     P.t = 0; P.n = 0; P.acc = 0;
     P.slow = avg > 1 / 40 ? P.slow + 1 : 0;
-    if (P.slow >= 2 && P.scale > 0.62) {
-      P.slow = 0;
-      P.scale = Math.max(0.6, P.scale * 0.8);
+    P.fast = avg < 1 / 55 ? (P.fast || 0) + 1 : 0;
+    let scale = P.scale;
+    if (P.slow >= 2 && P.scale > 0.62) { P.slow = 0; scale = Math.max(0.6, P.scale * 0.8); P.hold = 4; }
+    // climb back up, slowly, once things have been smooth for a while. Each step that
+    // has to be undone makes the next attempt wait longer, so it settles instead of pumping.
+    else if (P.fast >= (P.hold || 4) && P.scale < 1) { P.fast = 0; scale = Math.min(1, P.scale / 0.9); P.hold = Math.min(40, (P.hold || 4) * 2); }
+    if (scale !== P.scale) {
+      P.scale = scale;
       const pr = Math.min(window.devicePixelRatio || 1, this.q.pr) * P.scale;
       this.renderer.setPixelRatio(pr);
       this.composer.setPixelRatio(pr);
@@ -407,10 +420,7 @@ class Game {
       if (!this.paused) {
         if (input.camPressed) { this.settings.cam = this.cam.cycle(); this.saveSettings(); this.ui.toast(`Camera: ${this.cam.mode}`); }
         if (input.chatPressed) this.ui.openChat();
-        if (input.resetPressed && p.mode !== 'bail') {
-          if (this.courses.run && this.courses.run.state === 'running') this.courses.start(this.courses.run.course, {});
-          else p.respawnSafe();
-        }
+        if (input.resetPressed && p.mode !== 'bail') this.resetRider();
         if (input.interactPressed) {
           const c = this.courses.nearbyStart(p);
           if (c) this.courses.start(c);

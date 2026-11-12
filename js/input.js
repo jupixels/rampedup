@@ -111,13 +111,14 @@ export class Input {
     s.hopReleased = s.hopReleased || rl(0);
     s.manual = s.manual || b(4);
     s.manualPressed = s.manualPressed || pr(4);
-    const map = { 2: 'barspin', 3: 'tailwhip', 1: 'superman', 4: 'nohander', 5: 'cancan', 13: 'tabletop', 12: 'nofooter' };
+    // LB (4) is manual only. Tricks: X Y B RB, and the d-pad.
+    const map = { 2: 'barspin', 3: 'tailwhip', 1: 'superman', 5: 'nohander', 14: 'cancan', 13: 'tabletop', 12: 'nofooter' };
     for (const [i, t] of Object.entries(map)) { if (pr(+i)) s.tricks[t] = true; if (b(+i)) s.trickHeld[t] = true; }
     s.resetPressed = s.resetPressed || pr(8);
     s.pausePressed = pr(9);
-    s.camPressed = s.camPressed || pr(11) || pr(10);
-    s.interactPressed = s.interactPressed || pr(14) || pr(15);
-    s.mapPressed = s.mapPressed;
+    s.camPressed = s.camPressed || pr(11);          // right stick click
+    s.mapPressed = s.mapPressed || pr(10);          // left stick click
+    s.interactPressed = s.interactPressed || pr(15); // d-pad right
     s.orbitX += rx * 0.05; s.orbitY += ry * 0.03 * (this.invert ? -1 : 1);
     // menu navigation edges (D-pad or stick with auto-repeat)
     const now = performance.now();
