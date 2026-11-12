@@ -110,8 +110,7 @@ input:focus, select:focus { border-color: var(--accent); }
 .course-name { font-size: 18px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.12em; color: var(--accent); }
 .course-time { font-family: var(--display); font-size: 52px; line-height: 1; }
 .course-sub { font-size: 17px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
-/* sits below the course name, clock, gate count and split time */
-.hud-compass { position: absolute; top: 172px; left: 50%; width: 46px; height: 46px; margin-left: -23px; display: none; }
+.hud-compass { position: absolute; top: 110px; left: 50%; width: 46px; height: 46px; margin-left: -23px; display: none; }
 .hud-compass.on { display: block; }
 .hud-compass i { position: absolute; inset: 0; background: var(--accent); clip-path: polygon(50% 0, 100% 80%, 50% 62%, 0 80%); filter: drop-shadow(0 2px 6px rgba(0,0,0,0.5)); }
 .combo { position: absolute; left: 50%; top: 24%; transform: translateX(-50%); text-align: center; width: min(900px, 92vw); opacity: 0; transition: opacity .2s; }
@@ -309,11 +308,12 @@ input:focus, select:focus { border-color: var(--accent); }
 #replay .photo-group button span { color: inherit; font-size: inherit; margin: 0; letter-spacing: inherit; text-transform: inherit; }
 
 /* gate split: ahead (green) or behind (red) your best run */
-.course-split { font: 800 30px/1.1 "Barlow Condensed", sans-serif; font-style: italic; letter-spacing: 0.02em; opacity: 0; text-shadow: 0 2px 6px rgba(0,0,0,0.6); margin-top: 2px; }
+/* pinned just under the direction arrow (which ends 156 px from the top of the screen) */
+.course-split { position: absolute; top: 146px; left: 50%; transform: translateX(-50%); white-space: nowrap; font: 800 30px/1.1 "Barlow Condensed", sans-serif; font-style: italic; letter-spacing: 0.02em; opacity: 0; text-shadow: 0 2px 6px rgba(0,0,0,0.6); }
 .course-split.show { animation: splitpop 2.6s ease-out forwards; }
 .course-split.ahead { color: #57e08a; }
 .course-split.behind { color: #ff5d5d; }
-@keyframes splitpop { 0% { opacity: 0; transform: scale(1.5); } 12% { opacity: 1; transform: scale(1); } 75% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes splitpop { 0% { opacity: 0; transform: translateX(-50%) scale(1.5); } 12% { opacity: 1; transform: translateX(-50%) scale(1); } 75% { opacity: 1; } 100% { opacity: 0; transform: translateX(-50%) scale(1); } }
 #hud-modded { display: inline-block; margin-top: 4px; padding: 1px 8px; background: #c42b6b; color: #fff; font-weight: 800; font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; }
 #hud-modded.hidden { display: none; }
 /* short screens (laptops): the whole pause and title menu fits without scrolling */

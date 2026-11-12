@@ -1043,7 +1043,7 @@ export const CASES = [
     },
   },
   {
-    name: 'HUD: the split time sits clear of the direction arrow',
+    name: 'HUD: the split time sits just below the direction arrow',
     run: () => {
       const g = window.__game, sim = window.__sim;
       sim.reset();
@@ -1055,9 +1055,14 @@ export const CASES = [
       const split = document.getElementById('hud-split').getBoundingClientRect();
       const arrow = document.getElementById('hud-compass').getBoundingClientRect();
       const shown = document.getElementById('hud-compass').classList.contains('on') && split.height > 0 && arrow.height > 0;
-      const gap = arrow.top - split.bottom;
+      const el = document.getElementById('hud-split');
+      el.style.animation = 'none'; el.style.opacity = '1';   // measure it at rest, not mid pop-in
+      const rest = el.getBoundingClientRect();
+      el.style.animation = ''; el.style.opacity = '';
+      const gap = rest.top - arrow.bottom;
+      const centred = Math.abs((rest.left + rest.right) / 2 - (arrow.left + arrow.right) / 2) < 3;
       g.courses.cancel(true);
-      return { ok: shown && gap >= 4, detail: `split ends at ${Math.round(split.bottom)} px, arrow starts at ${Math.round(arrow.top)} px (gap ${Math.round(gap)} px), arrow shown=${shown}` };
+      return { ok: shown && gap >= 2 && gap < 30 && centred && Math.round(arrow.top) === 110, detail: `arrow ${Math.round(arrow.top)}-${Math.round(arrow.bottom)} px, split starts at ${Math.round(rest.top)} px (gap ${Math.round(gap)} px), centred=${centred}` };
     },
   },
   {
