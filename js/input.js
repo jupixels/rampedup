@@ -9,7 +9,7 @@ export const DEFAULT_KEYS = {
   pedal: ['KeyW', 'ArrowUp'], brake: ['KeyS', 'ArrowDown'], left: ['KeyA', 'ArrowLeft'], right: ['KeyD', 'ArrowRight'],
   hop: ['Space'], manual: ['ShiftLeft', 'ShiftRight'],
   barspin: ['KeyJ'], tailwhip: ['KeyK'], superman: ['KeyL'], nohander: ['KeyU'], cancan: ['KeyI'], tabletop: ['KeyO'], nofooter: ['KeyH'],
-  reset: ['KeyR'], restart: ['Backspace'], interact: ['KeyE', 'KeyF'], camera: ['KeyC'], map: ['KeyM'], chat: ['KeyT', 'Enter'], photo: ['KeyP'], riders: ['Tab'],
+  reset: ['KeyR'], restart: ['Backspace'], interact: ['KeyE', 'KeyF'], camera: ['KeyC'], map: ['KeyM'], chat: ['KeyT', 'Enter'], photo: ['KeyP'], replay: ['KeyV'], riders: ['Tab'],
 };
 // action -> standard-layout gamepad button. LB is manual only; Start always pauses.
 export const DEFAULT_PAD = {
@@ -20,7 +20,7 @@ export const DEFAULT_PAD = {
 export const ACTION_LABELS = {
   pedal: 'Pedal · front flip', brake: 'Brake · back flip', left: 'Steer left', right: 'Steer right', hop: 'Bunny hop', manual: 'Manual',
   barspin: 'Barspin', tailwhip: 'Tailwhip', superman: 'Superman', nohander: 'No Hander', cancan: 'Can Can', tabletop: 'Table Top', nofooter: 'No Footer',
-  reset: 'Back to last gate / safe spot', restart: 'Restart course', interact: 'Start course / lift', camera: 'Camera', map: 'Map', chat: 'Chat', photo: 'Photo mode', riders: 'Riders list',
+  reset: 'Back to last gate / safe spot', restart: 'Restart course', interact: 'Start course / lift', camera: 'Camera', map: 'Map', chat: 'Chat', photo: 'Photo mode', replay: 'Instant replay', riders: 'Riders list',
 };
 const PAD_NAMES = ['A', 'B', 'X', 'Y', 'LB', 'RB', 'LT', 'RT', 'Back', 'Start', 'L3', 'R3', 'D-pad ↑', 'D-pad ↓', 'D-pad ←', 'D-pad →', 'Home'];
 const TOUCH_NAMES = { pedal: 'stick up', brake: 'stick down', left: 'stick', right: 'stick', hop: 'HOP', manual: 'MANUAL', barspin: 'BAR', tailwhip: 'WHIP', superman: 'SUPER', nohander: 'NO HAND', cancan: 'CAN', tabletop: 'TABLE', nofooter: 'NO FOOT', reset: '↺', interact: 'GO', camera: 'CAM', map: 'MAP' };
@@ -164,6 +164,7 @@ export class Input {
     this.pollPad(s);
     s.pausePressed = (!this.capture && this.pressed('Escape')) || s.pausePressed;
     s.photoPressed = (this.enabled && !this.capture && this.hit('photo')) || !!s.photoPressedPad;
+    s.replayPressed = (this.enabled && !this.capture && this.hit('replay')) || !!s.replayPressedPad;
     this.pressedKeys.clear();
     this.releasedKeys.clear();
     this.mouse.dx = this.mouse.dy = 0;
@@ -230,6 +231,7 @@ export class Input {
       s.interactPressed = s.interactPressed || pr(M.interact);
       s.chatPressed = s.chatPressed || pr(M.chat);
       s.photoPressedPad = pr(M.photo);
+      s.replayPressedPad = pr(M.replay);
       s.scoreHeld = s.scoreHeld || b(M.riders);
       s.orbitX += rx * 0.05; s.orbitY += ry * 0.03 * (this.invert ? -1 : 1);
     }

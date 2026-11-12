@@ -6,7 +6,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
-import { buildWorld, Environment } from './world.js';
+import { buildWorld, Environment, lampGlows } from './world.js';
 import { setAnisotropy } from './textures.js';
 import { Player } from './player.js';
 import { Tricks } from './tricks.js';
@@ -20,6 +20,9 @@ import { Tutorial } from './tutorial.js';
 import { FX } from './fx.js';
 import { Progress } from './progress.js';
 import { PhotoMode } from './photo.js';
+import { Goals } from './goals.js';
+import { BikeGame } from './bike.js';
+import { Replay } from './replay.js';
 import { ZONES, SPAWN } from './layout.js';
 import { store, clamp } from './util.js';
 
@@ -36,7 +39,9 @@ const SanitizeShader = {
   fragmentShader: `uniform sampler2D tDiffuse; varying vec2 vUv;
     void main(){ vec4 c = texture2D(tDiffuse, vUv);
       if (isnan(c.r) || isnan(c.g) || isnan(c.b) || isinf(c.r) || isinf(c.g) || isinf(c.b)) c = vec4(0.5, 0.5, 0.5, 1.0);
-      gl_FragColor = vec4(clamp(c.rgb, 0.0, 60.0), 1.0); }`,
+      // 6.0 is already pure white after tone mapping; anything brighter (the sky around the sun)
+      // only fed the bloom and laid a milky veil over the whole frame
+      gl_FragColor = vec4(clamp(c.rgb, 0.0, 6.0), 1.0); }`,
 };
 
 const GradeShader = {
@@ -79,7 +84,7 @@ class Game {
   constructor() {
     this.settings = Object.assign({
       name: 'Rider' + Math.floor(Math.random() * 900 + 100),
-      colors: { frame: '#ff5a1f', helmet: '#f2f2f2', shirt: '#1d2b3a', pants: '#2a2a2a' },
+      colors: { frame: '#ff5a1f', helmet: '#f2f2f2', shirt: '#2f6fd6', pants: '#262a31' },
       quality: null, time: 'golden', fps: false, hints: true, cam: 'chase',
       camDist: 1, fov: 60, sens: 1, invert: false, reduceMotion: false, mph: false, minimap: true,
       classic: false, binds: null,
@@ -95,6 +100,34 @@ class Game {
 
   saveSettings() { store('settings', this.settings); }
 
+  // Switch graphics quality without reloading: resolution, shadows and post-processing change
+  // straight away. Tree, rock and grass density are built with the world, so those follow on
+  // the next load.
+  setQuality(name) {
+    if (!QUALITY[name]) return;
+    this.settings.quality = name;
+    this.saveSettings();
+    const q = this.q = QUALITY[name], r = this.renderer;
+    this.perf = null; // start resolution scaling afresh
+    r.setPixelRatio(Math.min(window.devicePixelRatio || 1, q.pr));
+    r.setSize(window.innerWidth, window.innerHeight);
+    const sun = this.env.sun;
+    r.shadowMap.enabled = q.shadows > 0;
+    sun.castShadow = q.shadows > 0;
+    sun.shadow.mapSize.set(q.shadows || 1024, q.shadows || 1024);
+    if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; }
+    const S = this.env.shadowRange = q.shadowRange || 70;
+    Object.assign(sun.shadow.camera, { left: -S, right: S, top: S, bottom: -S });
+    sun.shadow.camera.updateProjectionMatrix();
+    if (this.world.grass) this.world.grass.visible = !!q.grass;
+    // rebuild post-processing for the new sample count and effects
+    for (const p of this.composer.passes) p.dispose?.();
+    this.composer.renderTarget1.dispose(); this.composer.renderTarget2.dispose();
+    this.setupComposer();
+    this.fx.setScale(window.innerHeight * r.getPixelRatio());
+    this.scene.traverse((o) => { if (o.material) for (const m of Array.isArray(o.material) ? o.material : [o.material]) m.needsUpdate = true; });
+  }
+
   // push settings into the systems that use them
   applySettings() {
     const s = this.settings;
@@ -107,6 +140,7 @@ class Game {
     if (this.courses.run) this.courses.cancel(true);
     if (this.tutorial.active) this.tutorial.stop();
     if (this.photo.active) this.photo.exit();
+    if (this.replay.active) this.replay.exit();
     this.paused = false;
     this.ui.showPause(false);
     this.playing = false;
@@ -150,6 +184,19 @@ class Game {
     const audioP = this.audio.load().catch((e) => console.warn('audio', e));
 
     this.world = await buildWorld(this.scene, renderer, this.q, (t, p) => this.ui.loading(t, p));
+    lampGlows(this.scene, this.env, this.world.lampSpots);
+    this.env.setTime(this.settings.time);
+    // soft contact shadow under the rider: grounds the bike where the sun shadow is faint or out of range
+    {
+      const c = document.createElement('canvas'); c.width = c.height = 64;
+      const g2 = c.getContext('2d'), gr = g2.createRadialGradient(32, 32, 2, 32, 32, 32);
+      gr.addColorStop(0, 'rgba(0,0,0,0.55)'); gr.addColorStop(0.6, 'rgba(0,0,0,0.22)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+      g2.fillStyle = gr; g2.fillRect(0, 0, 64, 64);
+      this.blob = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4 }));
+      this.blob.renderOrder = 2;
+      this.blobG = { h: 0, n: new THREE.Vector3(0, 1, 0), surface: '', prop: false, water: false };
+      this.scene.add(this.blob);
+    }
     this.ui.loading('Tuning the bike', 0.88);
     await new Promise((r) => setTimeout(r, 0));
     const T0 = performance.now(), dbg = (l) => location.search.includes('debug') && console.log('[load]', l, Math.round(performance.now() - T0));
@@ -166,11 +213,14 @@ class Game {
     this.courses = new Courses(this);
     dbg('courses');
     this.net = new Net(this);
+    this.bike = new BikeGame(this);
     this.tutorial = new Tutorial(this);
     this.fx = new FX(this.scene);
     this.fx.setScale(window.innerHeight * Math.min(window.devicePixelRatio || 1, this.q.pr));
     this.progress = new Progress(this);
     this.photo = new PhotoMode(this);
+    this.goals = new Goals(this);
+    this.replay = new Replay(this);
     this.applySettings();
     // music starts with the first click or key press (browsers block audio before that)
     const startMusic = () => { if (this.audio.musicVol > 0) this.audio.music.start(); window.removeEventListener('pointerdown', startMusic); window.removeEventListener('keydown', startMusic); };
@@ -215,7 +265,7 @@ class Game {
     }
     // Guard against NaN/huge HDR pixels: bloom would smear a single bad pixel into a dark flash
     if (q.bloom) this.composer.addPass(new ShaderPass(SanitizeShader));
-    if (q.bloom) this.composer.addPass(new UnrealBloomPass(new THREE.Vector2(size.x / 2, size.y / 2), 0.1, 0.35, 1.8));
+    if (q.bloom) this.composer.addPass(new UnrealBloomPass(new THREE.Vector2(size.x / 2, size.y / 2), 0.1, 0.35, 3.2));
     this.composer.addPass(new OutputPass());
     this.grade = new ShaderPass(GradeShader);
     this.composer.addPass(this.grade);
@@ -278,6 +328,34 @@ class Game {
     this.ui.toast(`Race: ${c.name} — get ready!`);
   }
 
+  // ---- multiplayer: go to a friend, or watch them ride ----
+  gotoPlayer(id) {
+    const rp = this.net.players.get(id);
+    if (!rp) return;
+    const q = rp.model.root.position;
+    if (!this.playing) this.startRiding();
+    this.setPaused(false);
+    this.teleport(q.x + 1.5, q.z + 1.5, null, true);
+    this.ui.toast(`Rode over to ${rp.name}`);
+  }
+  spectate(id) {
+    const rp = this.net.players.get(id);
+    if (!rp) return;
+    if (this.courses.run) this.courses.cancel(true);
+    if (!this.playing) this.startRiding();
+    this.setPaused(false);
+    this.spectating = id;
+    this.player.frozen = true;
+    this.specView = { pos: rp.model.root.position, vel: new THREE.Vector3(), heading: 0, visHeading: 0, speed: 0, mode: 'ground', air: null, bail: null, fakie: false, model: rp.model };
+    this.ui.toast(`Watching ${rp.name}. Press ${this.input.label('hop') || 'HOP'} to stop`);
+  }
+  stopSpectating() {
+    if (!this.spectating) return;
+    this.spectating = null; this.specView = null;
+    this.player.frozen = false;
+    this.cam.snap(this.player);
+  }
+
   // R / Back: hop back to the last safe spot. During a gate course that is the last gate you
   // passed (the clock keeps running).
   resetRider() {
@@ -322,11 +400,12 @@ class Game {
   onTrickEvent(e) {
     this.tutorial?.onTrick(e);
     if (e.type === 'land' && e.name) {
+      this.bike.reportLanding(e.name, e.pts);
       if (e.pts >= 600) this.audio.play('trick', { volume: 0.8 });
       this.ui.feed(`${e.name}  +${e.pts.toLocaleString()}`);
     }
     if (e.type === 'bank') {
-      this.ui.bankPop(`+${e.score.toLocaleString()}`);
+      this.ui.bankPop(`+${e.score.toLocaleString()}${e.variety ? ` · variety +${Math.round(e.variety * 100)}%` : ''}`);
       this.progress.add(Math.max(5, e.score / 8), e.mult > 1 ? `${e.mult}x combo` : '');
       if (e.score >= 8000) this.audio.play('bigCombo');
       if (e.score >= 10000 && this.net.online) this.net.send({ t: 'feed', text: `landed a ${e.score.toLocaleString()} pt combo` });
@@ -334,6 +413,7 @@ class Game {
     }
     if (e.type === 'comboLost') this.ui.bankPop('Combo lost', true);
     this.courses.checkChallenges(e);
+    this.goals?.onEvent(e);
   }
 
   handlePlayerEvents() {
@@ -359,6 +439,11 @@ class Game {
           this.audio.play('grind');
           if (p.grind) this.fx.sparks(p.pos.clone().add(new THREE.Vector3(0, 0.22, 0)), p.grind.rail.dir.clone().multiplyScalar(p.grind.sign), 14);
           break;
+        case 'stallStart': this.audio.play('grind', { volume: 0.7 }); this.cam.addShake(0.15); break;
+        case 'wallStart':
+          this.audio.play('land', { volume: 0.8 });
+          if (p.wall) this.fx.dust(p.pos, 'concrete', 8, 0.5);
+          break;
         case 'bail': {
           this.audio.play('bail');
           if (ev.splash) this.fx.splash(new THREE.Vector3(ev.pos.x, this.world.collision.waterLevel, ev.pos.z), 90);
@@ -369,6 +454,7 @@ class Game {
           const lines = BAIL_LINES[ev.reason] || BAIL_LINES.default;
           this.ui.bailCaption(lines[Math.floor(Math.random() * lines.length)], `Bail #${this.bails}`);
           this.courses.checkChallenges({ type: 'bail', reason: ev.reason });
+          this.goals.onEvent({ type: 'bail', reason: ev.reason });
           break;
         }
         case 'thud':
@@ -421,9 +507,11 @@ class Game {
     if (!this.noAdapt) this.adaptResolution(rawDt);
     const input = this.input.poll();
     const p = this.player;
-    if (!this.playing || this.paused || this.ui.mapOpen || this.photo.active) this.ui.menuNav(input.nav);
+    if (!this.playing || this.paused || this.ui.mapOpen || this.photo.active || this.replay.active) this.ui.menuNav(input.nav);
     this.audio.music.setMuffled(!this.playing || this.paused);
-    if (this.playing && this.photo.active) {
+    if (this.playing && this.replay.active) {
+      this.replay.update(dt, input);
+    } else if (this.playing && this.photo.active) {
       if (input.pausePressed || input.photoPressed) this.photo.exit();
       else this.photo.update(dt, input);
     } else if (this.playing) {
@@ -432,6 +520,7 @@ class Game {
         else this.setPaused(!this.paused);
       }
       if (input.photoPressed && !this.paused && !this.ui.mapOpen) this.photo.enter();
+      if (input.replayPressed && !this.paused && !this.ui.mapOpen && !this.spectating) this.replay.enter();
       if (input.mapPressed) { if (this.ui.mapOpen) this.ui.closeMap(); else if (!this.paused) this.ui.openMap(); }
       if (!this.paused) {
         if (input.camPressed) { this.settings.cam = this.cam.cycle(); this.saveSettings(); this.ui.toast(`Camera: ${this.cam.mode}`); }
@@ -448,11 +537,24 @@ class Game {
         p.update(dt * slow, input);
         this.tricks.update(dt, p);
         this.handlePlayerEvents();
+        this.replay.record(dt);
+        this.goals.update(dt);
         this.courses.update(dt);
         this.fx.update(dt, p);
       }
       this.tutorial.update(dt);
-      this.cam.update(dt, p, this.paused ? { orbitX: 0, orbitY: 0 } : input);
+      if (this.spectating) {
+        // follow the other rider: heading and speed come from their latest snapshot
+        const rp = this.net.players.get(this.spectating), v = this.specView;
+        if (!rp || input.hopPressed || input.resetPressed) this.stopSpectating();
+        else {
+          const f = new THREE.Vector3(0, 0, 1).applyQuaternion(rp.model.root.quaternion);
+          v.heading = v.visHeading = Math.atan2(f.x, f.z);
+          const last = rp.buf[rp.buf.length - 1];
+          v.speed = last ? last.d[21] || 0 : 0;
+        }
+      }
+      this.cam.update(dt, this.spectating ? this.specView : p, this.paused ? { orbitX: 0, orbitY: 0 } : input);
       this.ui.update(dt);
     } else {
       // menu: slow cinematic orbit over The Yard
@@ -465,6 +567,21 @@ class Game {
       this.camera.position.lerp(target, this.focusRider ? 0.08 : 1);
       this.camera.lookAt(focus);
       this.courses.update(dt);
+    }
+    // contact shadow follows the bike down to whatever is under it
+    if (this.blob) {
+      const bp = p.model.root.position, col = this.world.collision;
+      const gr = col.ground(bp.x, bp.z, bp.y + 0.4, this.blobG);
+      const up = Math.max(0, bp.y - gr.h);
+      this.blob.visible = p.mode !== 'bail' && p.mode !== 'wall' && up < 9 && !gr.water && p.model.root.visible;
+      if (this.blob.visible) {
+        this.blob.position.set(bp.x, gr.h + 0.02, bp.z);
+        this.blob.quaternion.setFromUnitVectors(THREE.Object3D.DEFAULT_UP, gr.n);
+        this.blob.rotateY(p.visHeading);
+        const k = 1 + up * 0.22;
+        this.blob.scale.set(1.0 * k, 1, 2.0 * k);
+        this.blob.material.opacity = 0.9 / (1 + up * 0.6);
+      }
     }
     this.net.update(dt);
     this.audio.update(p, this.paused || !this.playing);

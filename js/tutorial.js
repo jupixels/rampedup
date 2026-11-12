@@ -84,6 +84,18 @@ export class Tutorial {
         on: { grindStart: (s) => { s.done = true; } },
       },
       {
+        title: 'Lip trick',
+        text: () => `Ride up the vert ramp and air out. As you come back down, hold ${K(kbd('Shift'), kbd('LB'), 'MANUAL')} to stall on the coping. Balance, then ${K(kbd('Space'), kbd('A'), 'HOP')} to drop back in.`,
+        setup: yard(-35, -28, Math.PI),
+        on: { stallStart: (s) => { s.done = true; } },
+      },
+      {
+        title: 'Variations',
+        text: () => `Tricks have variations. In the air, hold ${K(kbd('Shift'), kbd('LB'), 'MANUAL')} and press ${K(kbd('J'), kbd('X'), 'BAR')} for an X-Up. Land one.`,
+        setup: yard(56, 66, Math.PI),
+        onTrick: { land: (s, e) => { if (e.air.tricks.some((t) => t.type === 'xup')) s.done = true; } },
+      },
+      {
         title: 'Manual',
         text: () => `While rolling, hold ${K(kbd('Shift'), kbd('LB'), 'MANUAL')} to pull a wheelie. Keep it balanced with ${K(kbd('W') + ' ' + kbd('S'), 'the stick up and down', 'the stick up and down')} for 2 seconds.`,
         setup: yard(-20, 52, Math.PI / 2),

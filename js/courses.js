@@ -120,6 +120,7 @@ export class Courses {
     this.list = defineCourses(w);
     this.sprockets = defineSprockets(w);
     this.found = new Set(store('sprockets') || []);
+    this.seen = new Set(store('sprocketsSeen') || []); // spotted but not yet collected: these show on the map
     this.best = store('best') || {};
     this.medals = store('medals') || {};
     this.done = new Set(store('challenges') || []);
@@ -160,9 +161,9 @@ export class Courses {
       ring.position.y = 0.06;
       const beam = new THREE.Mesh(beamGeo, new THREE.ShaderMaterial({
         transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
-        uniforms: { uColor: { value: color }, uTime: { value: 0 } },
+        uniforms: { uColor: { value: color }, uTime: { value: 0 }, uFade: { value: 1 } },
         vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
-        fragmentShader: 'varying vec2 vUv; uniform vec3 uColor; uniform float uTime; void main(){ float a = pow(1.0 - vUv.y, 2.2) * 0.55 * (0.8 + 0.2*sin(uTime*3.0 + vUv.y*20.0)); gl_FragColor = vec4(uColor * a, a); }',
+        fragmentShader: 'varying vec2 vUv; uniform vec3 uColor; uniform float uTime; uniform float uFade; void main(){ float a = pow(1.0 - vUv.y, 2.2) * 0.55 * (0.8 + 0.2*sin(uTime*3.0 + vUv.y*20.0)) * uFade; gl_FragColor = vec4(uColor * a, a); }',
       }));
       beam.position.y = 15;
       const best = this.best[c.id];
@@ -355,12 +356,19 @@ export class Courses {
     const g = this.game;
     const p = g.player;
     const t = performance.now() / 1000;
-    for (const m of this.markers) { m.beam.material.uniforms.uTime.value = t; m.grp.visible = !this.run; }
+    const cp = g.camera.position;
+    for (const m of this.markers) {
+      m.beam.material.uniforms.uTime.value = t; m.grp.visible = !this.run;
+      // standing in a beam used to tint the whole screen: fade it out as the camera gets close
+      const d = Math.hypot(cp.x - m.grp.position.x, cp.z - m.grp.position.z);
+      m.beam.material.uniforms.uFade.value = Math.min(1, Math.max(0, (d - 2.4) / 5));
+    }
     for (const { m } of this.sprocketMeshes) { m.rotation.y += dt * 1.6; m.position.y += Math.sin(t * 2 + m.position.x) * 0.002; }
     // sprocket pickups
     for (let i = this.sprocketMeshes.length - 1; i >= 0; i--) {
       const { s, m } = this.sprocketMeshes[i];
       const dx = p.pos.x - s.x, dy = p.pos.y + 0.9 - s.y, dz = p.pos.z - s.z;
+      if (!this.seen.has(s.id) && dx * dx + dz * dz < 45 * 45) { this.seen.add(s.id); store('sprocketsSeen', [...this.seen]); }
       if (dx * dx + dy * dy + dz * dz < 2.2 * 2.2 && p.mode !== 'bail') {
         this.group.remove(m);
         this.sprocketMeshes.splice(i, 1);
@@ -402,7 +410,7 @@ export class Courses {
     r.time += dt;
     // record ghost frames @ 15Hz
     r.recT += dt;
-    if (r.recT >= 1 / 15) { r.recT = 0; r.rec.push([+r.time.toFixed(3), ...p.snapshot().slice(0, 20)]); }
+    if (r.recT >= 1 / 15) { r.recT = 0; r.rec.push([+r.time.toFixed(3), ...p.snapshot()]); }
     this.playGhost(r.time);
     if (r.course.type === 'score') {
       if (r.time >= r.course.duration) this.finish();
@@ -477,6 +485,7 @@ export class Courses {
     g.progress?.add(150 + medal * 250 + (isBest ? 150 : 0), c.name);
     if (r.opts.race) g.net.sendFinish(c.id, result);
     this.checkChallenges({ type: 'courseDone', medal, course: c });
+    g.goals?.onEvent({ type: 'courseDone', medal, course: c });
   }
 
   checkChallenges(ev) {
@@ -513,5 +522,8 @@ export function applySnapshot(model, a, b, t) {
   P.steer = L(8); P.barspin = Math.abs(b[9] - a[9]) > 3 ? b[9] : L(9); P.whip = Math.abs(b[10] - a[10]) > 3 ? b[10] : L(10);
   P.crouch = L(11); P.shift = L(12); P.superman = L(13); P.nohander = L(14); P.cancan = L(15); P.nofooter = L(16); P.tuck = L(17);
   P.crank = a[18]; P.wheel = a[19];
+  // newer snapshots carry the variation poses; older ghosts simply don't have them
+  const X = (i) => (a.length > i && b.length > i ? L(i) : 0);
+  P.xup = X(22); P.turndown = X(23); P.tucknh = X(24); P.seat = X(25); P.onefoot = X(26);
   model.updatePose();
 }

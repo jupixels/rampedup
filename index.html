@@ -8,6 +8,17 @@
   <meta name="theme-color" content="#0e0f11">
   <meta property="og:title" content="Ramped Up — Open World BMX">
   <meta property="og:description" content="Ride, trick and race your friends in a browser BMX sandbox.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://jupixels.github.io/rampedup/">
+  <meta property="og:image" content="https://jupixels.github.io/rampedup/og.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:image" content="https://jupixels.github.io/rampedup/og.jpg">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230e0f11'/%3E%3Ccircle cx='18' cy='42' r='10' fill='none' stroke='%23ff5a1f' stroke-width='5'/%3E%3Ccircle cx='46' cy='42' r='10' fill='none' stroke='%23ff5a1f' stroke-width='5'/%3E%3Cpath d='M18 42 L28 24 L42 24 L46 42 M28 24 L34 42' fill='none' stroke='%23f4f1ea' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -73,6 +84,12 @@
         <button class="btn small" data-action="copylink">Copy invite link</button>
         <button class="btn small ghost" data-action="leave">Leave</button>
       </div>
+      <div class="rider-list hidden" data-bind="riders"></div>
+      <div class="race-host hidden" data-bind="bikehost">
+        <h3>Game of BIKE (host)</h3>
+        <p class="muted small">One rider sets a trick, everyone else must land the same trick or take a letter. Spell B-I-K-E and you are out.</p>
+        <div class="row"><button class="btn small" data-action="bikestart"><span>Start Game of BIKE</span></button></div>
+      </div>
       <div class="race-host hidden" data-bind="racehost">
         <h3>Start a race (host)</h3>
         <div class="race-list" data-bind="racelist"></div>
@@ -85,8 +102,18 @@
       <h2>Courses</h2>
       <p class="muted">Ride to a glowing start marker and press <kbd>E</kbd>, or jump straight in here. Beat your ghost.</p>
       <div class="course-list" data-bind="courselist"></div>
+      <h3>Today's challenges</h3>
+      <p class="muted small">Three new ones every day, the same for every rider.</p>
+      <div class="challenge-list" data-bind="dailylist"></div>
+      <h3>Spot goals <span class="muted" data-bind="goalcount"></span></h3>
+      <p class="muted small">Each spot has five goals. Ride there and the next one shows under the spot name.</p>
+      <div class="challenge-list" data-bind="goallist"></div>
+      <h3>Gaps <span class="muted" data-bind="gapcount"></span></h3>
+      <div class="challenge-list" data-bind="gaplist"></div>
       <h3>Challenges <span class="muted" data-bind="chcount"></span></h3>
       <div class="challenge-list" data-bind="challist"></div>
+      <h3>Lifetime stats</h3>
+      <div class="stat-list" data-bind="statlist"></div>
     </div>
   </template>
 
@@ -101,6 +128,11 @@
       <div class="swatch-group" data-part="rims"><span>Rims</span><div class="swatches"></div></div>
       <div class="swatch-group" data-part="tires"><span>Tyres</span><div class="swatches"></div></div>
       <div class="swatch-group" data-part="bars"><span>Bars</span><div class="swatches"></div></div>
+      <div class="swatch-group" data-part="pegs"><span>Pegs</span><div class="swatches"></div></div>
+      <div class="swatch-group" data-part="seat"><span>Seat</span><div class="swatches"></div></div>
+      <div class="swatch-group" data-part="grips"><span>Grips</span><div class="swatches"></div></div>
+      <div class="swatch-group" data-part="shoes"><span>Shoes</span><div class="swatches"></div></div>
+      <div class="swatch-group" data-part="gloves"><span>Gloves</span><div class="swatches"></div></div>
       <p class="muted small" data-bind="unlockhint"></p>
     </div>
   </template>
@@ -123,6 +155,7 @@
           <option value="midday">Midday</option>
           <option value="sunset">Sunset</option>
           <option value="overcast">Overcast</option>
+          <option value="night">Night (floodlit)</option>
         </select>
       </label>
       <h3>Audio</h3>
@@ -146,7 +179,7 @@
       <label class="check"><input type="checkbox" data-bind="minimap" id="set-minimap"> Show minimap</label>
       <label class="check"><input type="checkbox" data-bind="hints" id="set-hints"> Show control hints</label>
       <label class="check"><input type="checkbox" data-bind="fps" id="set-fps"> Show FPS</label>
-      <p class="muted small">Quality changes apply after a reload.</p>
+      <p class="muted small">Quality changes apply straight away. Tree and grass density follow on the next load.</p>
       <div class="row"><button class="btn small ghost" data-action="resetprogress"><span>Reset all progress</span></button></div>
     </div>
   </template>
@@ -195,7 +228,15 @@
         <div><b>Can Can</b><span>I, hold to stretch it out</span><em>350 + hold</em></div>
         <div><b>Table Top</b><span>O, lay the bike flat</span><em>380 + hold</em></div>
         <div><b>No Footer</b><span>H, feet off the pedals</span><em>400 + hold</em></div>
+        <div><b>X-Up</b><span>Shift + J, bars crossed and back</span><em>300 + hold</em></div>
+        <div><b>Turndown</b><span>Shift + O, bars turned down, bike twisted</span><em>560 + hold</em></div>
+        <div><b>Tuck No Hander</b><span>Shift + U, chest on the bars, arms out</span><em>520 + hold</em></div>
+        <div><b>Superman Seat Grab</b><span>Shift + L, one hand on the seat</span><em>620 + hold</em></div>
+        <div><b>One Footer</b><span>Shift + H, one foot off</span><em>300 + hold</em></div>
       </div>
+      <p class="small muted"><b>Variations:</b> hold the manual button (Shift, LB or MANUAL) in the air and press a trick to get its variation.</p>
+      <p class="small muted"><b>Named combos</b> score 10% more: Truckdriver (360 + barspin), 360 Whip, Flipwhip (backflip + tailwhip), Bar Flip, Superflip, Cash Roll (360 backflip), Whip to Bar, Decade, and on quarter pipes the Flair (backflip 180).</p>
+      <p class="small muted"><b>Bonuses:</b> a combo with four or more different tricks earns a variety bonus of 10% per extra trick, up to 50%. Once the game knows which way you usually spin, spinning the other way is an Opposite spin worth 25% more.</p>
       <p class="small muted">Airtime and height add bonus points. Repeating the same trick in one combo is worth half each time, so mix it up. Mix tricks into one air: a 360 Backflip Tailwhip is one huge trick.</p>
 
       <h3 id="g-grinds">Grinds &amp; manuals</h3>
@@ -203,6 +244,8 @@
         <li>Land on any <b>rail, ledge, pipe or handrail</b> roughly lined up with it and you lock on. What you hold as you lock on picks the grind: nothing for a Double Peg, W for an Icepick, S for a Feeble, A/D for a Smith.</li>
         <li>Keep the <b>balance meter</b> green with A/D. Hop off with Space for extra pop, or ride off the end.</li>
         <li><b>Manual</b>: hold Shift while rolling and keep the meter centred with W/S. Holding Shift as you land drops you straight into one. Hold S as you start it for a nose manual.</li>
+        <li><b>Lip tricks</b>: air out of a quarter pipe, then hold Shift as you come back down to the coping to stall on it. Hold W for a Nosepick, S for a Tail Tap, A/D for a Disaster; come back in backwards for an Abubaca. Balance with A/D and hop to drop back in. Stalls pay by the second.</li>
+        <li><b>Wallrides</b>: hop at a graffiti wall or the side of a shipping container on a shallow angle and your tyres stick. Hop to push off.</li>
         <li><b>Fakie</b>: land an air backwards and you keep rolling backwards. Tap S for a <b>revert</b>, or hop and spin 180 for a <b>Half Cab</b>. Tricks out of fakie score 15% more.</li>
         <li><b>Flips need a fresh press</b>: a key you were already holding at take-off (usually W) is ignored until you let it go, so pedalling off a lip is safe.</li>
       </ul>
@@ -240,6 +283,8 @@
   <section id="hud" class="hidden">
     <div class="hud-tl">
       <div class="zone" id="hud-zone">The Yard</div>
+      <div class="goal" id="hud-goal"></div>
+      <div class="bike hidden" id="hud-bike"><b></b><span></span></div>
       <div class="speed"><b id="hud-speed">0</b><small>km/h</small></div>
       <div class="score">Score <b id="hud-score">0</b></div>
       <div class="level"><span id="hud-level">Lv 1</span><i><b id="hud-xp"></b></i></div>
@@ -305,6 +350,7 @@
         <button data-panel="customize">Customize</button>
         <button data-panel="settings">Settings</button>
         <button data-panel="controls">Guide</button>
+        <button data-action="replay">Instant replay</button>
         <button data-action="photo">Photo mode</button>
         <button data-action="restartcourse" class="hidden" id="btn-restartcourse">Restart course</button>
         <button data-action="quitcourse" class="hidden" id="btn-quitcourse">Quit course</button>
@@ -316,10 +362,19 @@
 
   <!-- Touch controls -->
   <!-- Photo mode -->
+  <section id="replay" class="hidden">
+    <div class="photo-bar">
+      <div class="photo-group"><button data-rp="play"><span>Pause</span></button><input type="range" min="0" max="1000" step="1" data-rp="scrub" aria-label="Replay position"></div>
+      <div class="photo-group"><button data-rp="speed"><span>Speed 1×</span></button></div>
+      <div class="photo-group"><button data-rp="clip" class="primary"><span>Save clip</span></button><button data-rp="exit"><span>Done</span></button></div>
+    </div>
+    <div class="photo-help">Instant replay · drag to orbit · scroll to zoom · Save clip records the last 10 seconds at the chosen speed</div>
+  </section>
+
   <section id="photo" class="hidden">
     <div class="photo-bar">
       <div class="photo-group"><span>Light</span>
-        <button data-time="golden">Golden</button><button data-time="midday">Midday</button><button data-time="sunset">Sunset</button><button data-time="overcast">Overcast</button>
+        <button data-time="golden">Golden</button><button data-time="midday">Midday</button><button data-time="sunset">Sunset</button><button data-time="overcast">Overcast</button><button data-time="night">Night</button>
       </div>
       <label class="photo-group"><span>Lens</span><input type="range" min="20" max="100" step="1" data-ph="fov" id="photo-fov"></label>
       <div class="photo-group"><button data-ph="rider">Hide rider</button></div>
@@ -354,5 +409,9 @@
   <div id="rotate"><b>Turn your phone sideways</b><span>Ramped Up plays in landscape.</span></div>
   <noscript><p class="noscript">Ramped Up needs JavaScript and WebGL.</p></noscript>
   <script type="module" src="js/main.js"></script>
+  <script>
+    // offline support and "install app" (only on the real site, never during local development)
+    if ('serviceWorker' in navigator && location.protocol === 'https:') window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+  </script>
 </body>
 </html>

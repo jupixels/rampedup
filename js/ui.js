@@ -1,6 +1,7 @@
 // DOM UI: menus, panels, HUD, minimap, big map, chat, touch controls.
 import { ZONES, FAST_TRAVEL, WORLD, LAKE } from './layout.js';
 import { CHALLENGES } from './courses.js';
+import { GOALS } from './goals.js';
 import { formatTime, clamp, store, safeColor } from './util.js';
 import { TRICK_LIST, ACTION_LABELS, DEFAULT_KEYS, keyName, padName } from './input.js';
 import { UNLOCKS, BASE, xpForLevel } from './progress.js';
@@ -9,8 +10,8 @@ const $ = (s, el = document) => el.querySelector(s);
 const PALETTES = {
   frame: ['#ff5a1f', '#ffd21f', '#3fd4ff', '#57e08a', '#e8e8e8', '#151515', '#c42b6b', '#7b5cff', '#2b6cff', '#9aa1a8'],
   helmet: ['#f2f2f2', '#151515', '#ff5a1f', '#ffd21f', '#3fd4ff', '#c42b6b', '#57e08a', '#7b5cff'],
-  shirt: ['#1d2b3a', '#f2f2f2', '#151515', '#8a1e1e', '#ff5a1f', '#2f6b3a', '#ffd21f', '#3fd4ff', '#6b4a2f'],
-  pants: ['#2a2a2a', '#3b4a5e', '#5b4a3a', '#151515', '#7a7a7a', '#2f3d2a', '#c8b89a'],
+  shirt: ['#2f6fd6', '#1d2b3a', '#f2f2f2', '#151515', '#8a1e1e', '#ff5a1f', '#2f6b3a', '#ffd21f', '#3fd4ff', '#6b4a2f'],
+  pants: ['#262a31', '#2a2a2a', '#3b4a5e', '#5b4a3a', '#151515', '#7a7a7a', '#2f3d2a', '#c8b89a'],
 };
 const MEDAL = ['', 'Bronze', 'Silver', 'Gold'];
 const MEDAL_C = ['', '#c98a54', '#c9d1d9', '#ffd21f'];
@@ -95,10 +96,11 @@ export class UI {
       case 'restartcourse': g.setPaused(false); g.restartCourse(); break;
       case 'resetbinds': g.input.setBinds(null); g.settings.binds = null; g.saveSettings(); this.renderBinds(); this._hintKey = null; break;
       case 'photo': g.setPaused(false); g.photo.enter(); break;
+      case 'replay': g.setPaused(false); g.replay.enter(); break;
       case 'quitmenu': g.quitToMenu(); break;
       case 'resetprogress': {
         if (b.dataset.armed) {
-          ['xp', 'best', 'medals', 'challenges', 'sprockets', 'tutorialDone', 'stats'].forEach((k) => { try { localStorage.removeItem('rampedup.' + k); } catch (e) {} });
+          ['xp', 'best', 'medals', 'challenges', 'sprockets', 'sprocketsSeen', 'tutorialDone', 'stats', 'goals', 'gaps', 'daily', 'parts'].forEach((k) => { try { localStorage.removeItem('rampedup.' + k); } catch (e) {} });
           Object.keys(localStorage).filter((k) => k.startsWith('rampedup.ghost.')).forEach((k) => localStorage.removeItem(k));
           location.reload();
         } else { b.dataset.armed = '1'; b.innerHTML = '<span>Click again to erase everything</span>'; }
@@ -119,6 +121,10 @@ export class UI {
         break;
       }
       case 'race': g.net.startRace(b.dataset.course); g.setPaused(false); break;
+      case 'bikestart': if (g.bike.start()) g.setPaused(false); break;
+      case 'bikestop': g.bike.stop(); this.renderMp(); break;
+      case 'gotoplayer': g.gotoPlayer(b.dataset.id); break;
+      case 'watchplayer': g.spectate(b.dataset.id); break;
       case 'course': {
         const c = g.courses.list.find((x) => x.id === b.dataset.course);
         if (!g.playing) g.startRiding();
@@ -138,7 +144,7 @@ export class UI {
     } catch (e) {
       console.warn(e);
       const t = e && e.type;
-      this.mpMsg(t === 'peer-unavailable' ? 'Room not found' : t === 'unavailable-id' ? 'That room code is taken' : t === 'browser-incompatible' ? 'Your browser does not support WebRTC' : 'Could not connect. Check your network and try again.');
+      this.mpMsg(t === 'room-full' ? 'That room is full' : t === 'peer-unavailable' ? 'Room not found' : t === 'unavailable-id' ? 'That room code is taken' : t === 'browser-incompatible' ? 'Your browser does not support WebRTC' : 'Could not connect. Check your network and try again.');
     }
     this.panelEl && this.panelEl.querySelectorAll('.btn').forEach((x) => (x.disabled = false));
     this.renderMp();
@@ -185,6 +191,26 @@ export class UI {
         list.appendChild(b);
       }
     }
+    // riders in the room: ride over to them or watch them
+    const riders = p.querySelector('[data-bind=riders]');
+    riders.textContent = '';
+    riders.classList.toggle('hidden', !on || !net.players.size);
+    if (on) for (const rp of net.players.values()) {
+      const row = document.createElement('div'); row.className = 'rider-row';
+      const dot = document.createElement('i'); dot.style.background = safeColor(rp.colors.frame, '#ffffff');
+      const nm = document.createElement('span'); nm.textContent = rp.name;
+      const mk = (label, action) => { const b = document.createElement('button'); b.className = 'btn small'; b.dataset.action = action; b.dataset.id = rp.id; const s = document.createElement('span'); s.textContent = label; b.appendChild(s); return b; };
+      row.append(dot, nm, mk('Go to', 'gotoplayer'), mk('Watch', 'watchplayer'));
+      riders.appendChild(row);
+    }
+    const bk = p.querySelector('[data-bind=bikehost]');
+    bk.classList.toggle('hidden', !(on && net.isHost));
+    if (on && net.isHost) {
+      const b = bk.querySelector('button');
+      b.dataset.action = this.game.bike.active ? 'bikestop' : 'bikestart';
+      b.firstElementChild.textContent = this.game.bike.active ? 'Stop Game of BIKE' : 'Start Game of BIKE';
+      b.disabled = !this.game.bike.active && net.players.size < 1;
+    }
     const params = new URLSearchParams(location.search);
     const inp = p.querySelector('[data-bind=code]');
     if (params.get('room') && !inp.value) inp.value = params.get('room').toUpperCase();
@@ -214,6 +240,57 @@ export class UI {
       ch.appendChild(el);
     }
     p.querySelector('[data-bind=chcount]').textContent = `${done}/${CHALLENGES.length} · Sprockets ${C.found.size}/${C.sprockets.length}`;
+    this.renderGoals(p);
+  }
+
+  // daily challenge, spot goals, gaps and lifetime stats
+  renderGoals(p) {
+    const G = this.game.goals, st = this.game.tricks.stats;
+    const row = (done, name, desc, right = '') => {
+      const el = document.createElement('div');
+      el.className = 'challenge' + (done ? ' done' : '');
+      const i = document.createElement('i'), a = document.createElement('span'), b = document.createElement('small');
+      a.textContent = name; b.textContent = desc + (right ? ' · ' + right : '');
+      el.append(i, a, b);
+      return el;
+    };
+    const daily = p.querySelector('[data-bind=dailylist]');
+    G.dailyList.forEach((d, i) => {
+      const v = G.daily.prog[d.stat] || 0;
+      daily.appendChild(row(G.daily.done.includes(i), d.name, `${Math.min(d.n, Math.floor(v)).toLocaleString()} / ${d.n.toLocaleString()}`));
+    });
+    const goals = p.querySelector('[data-bind=goallist]');
+    for (const [k, z] of Object.entries(ZONES)) {
+      const h = document.createElement('h4');
+      h.className = 'goal-zone';
+      h.style.borderColor = z.color;
+      h.textContent = `${z.name}  ${G.count(k)}/5`;
+      goals.appendChild(h);
+      const next = G.next(k);
+      for (const goal of GOALS.filter((x) => x.zone === k)) {
+        const done = G.done.has(goal.id);
+        // goals past the next one stay a mystery until you get there
+        if (!done && goal !== next) { goals.appendChild(row(false, `Goal ${goal.tier}`, 'Finish the one before to reveal')); continue; }
+        goals.appendChild(row(done, goal.name, goal.desc));
+      }
+    }
+    p.querySelector('[data-bind=goalcount]').textContent = `${G.done.size}/${GOALS.length}`;
+    const gaps = p.querySelector('[data-bind=gaplist]');
+    for (const [k, z] of Object.entries(ZONES)) {
+      const list = G.byZone[k] || [];
+      if (!list.length) continue;
+      const found = list.filter((x) => G.foundGaps.has(x.id));
+      gaps.appendChild(row(found.length === list.length, z.name, found.length ? found.map((x) => x.name).join(', ') : 'None found yet', `${found.length}/${list.length}`));
+    }
+    p.querySelector('[data-bind=gapcount]').textContent = `${G.foundGaps.size}/${G.gaps.length}`;
+    const stats = p.querySelector('[data-bind=statlist]');
+    const S = [
+      ['Lifetime score', Math.round(st.lifetime).toLocaleString()], ['Best combo', Math.round(st.best).toLocaleString()], ['Combos banked', st.combos.toLocaleString()],
+      ['Longest air', st.maxAir.toFixed(1) + ' s'], ['Highest air', st.maxHeight.toFixed(1) + ' m'], ['Biggest spin', st.maxSpin + '°'], ['Flips landed', st.flips.toLocaleString()],
+      ['Distance ground', Math.round(st.grindDist).toLocaleString() + ' m'], ['Longest manual', st.maxManual.toFixed(1) + ' s'], ['Lip trick time', st.stallTime.toFixed(0) + ' s'],
+      ['Wallride distance', Math.round(st.wallDist).toLocaleString() + ' m'], ['Bails', st.bails.toLocaleString()],
+    ];
+    for (const [k, v] of S) { const d = document.createElement('div'); const a = document.createElement('span'), b = document.createElement('b'); a.textContent = k; b.textContent = v; d.append(a, b); stats.appendChild(d); }
   }
 
   renderCustomize() {
@@ -277,7 +354,7 @@ export class UI {
       if (el.type === 'checkbox') el.checked = !!get(); else el.value = get();
       el.addEventListener(ev, () => { set(el.type === 'checkbox' ? el.checked : el.type === 'range' ? +el.value : el.value); g.saveSettings(); g.applySettings(); this.applyPrefs(); });
     };
-    bind('quality', () => s.quality, (v) => { s.quality = v; g.saveSettings(); this.toast('Reload the page to apply the new quality'); }, 'change');
+    bind('quality', () => s.quality, (v) => { g.setQuality(v); this.toast('Quality applied. Tree and grass density follow on the next load.'); }, 'change');
     bind('time', () => s.time, (v) => { s.time = v; g.env.setTime(v); }, 'change');
     bind('volume', () => g.audio.volume, (v) => g.audio.setVolume(v));
     bind('music', () => g.audio.musicVol, (v) => g.audio.setMusicVolume(v));
@@ -364,7 +441,7 @@ export class UI {
   menuNav(nav) {
     if (!nav) return;
     const g = this.game;
-    const screens = [this.el.map, document.getElementById('photo'), this.el.pause, this.el.menu, this.el.result];
+    const screens = [this.el.map, document.getElementById('replay'), document.getElementById('photo'), this.el.pause, this.el.menu, this.el.result];
     const scr = screens.find((x) => x && !x.classList.contains('hidden') && x.offsetParent !== null);
     if (!scr) return;
     const items = [...scr.querySelectorAll('button, input, select')].filter((x) => x.offsetParent !== null && !x.disabled);
@@ -386,6 +463,7 @@ export class UI {
     if (nav.ok && cur) { if (cur.type === 'checkbox') { cur.checked = !cur.checked; cur.dispatchEvent(new Event('change', { bubbles: true })); } else cur.click(); }
     if (nav.back) {
       if (this.mapOpen) this.closeMap();
+      else if (g.replay?.active) g.replay.exit();
       else if (g.photo?.active) g.photo.exit();
       else if (this.panelOpen) this.closePanels();
       else if (g.playing && g.paused) g.setPaused(false);
@@ -452,7 +530,7 @@ export class UI {
     g.drawImage(this.mapImg, -px, -pz);
     const dot = (x, z, col, r = 3) => { const [mx, mz] = this.worldToMap(x, z, N); g.fillStyle = col; g.beginPath(); g.arc(mx - px, mz - pz, r / scale, 0, 7); g.fill(); };
     for (const m of this.game.courses.markers) if (m.grp.visible) dot(m.course.start.x, m.course.start.z, ZONES[m.course.zone].color, 4);
-    for (const { s } of this.game.courses.sprocketMeshes) dot(s.x, s.z, '#ffd21f', 2.5);
+    for (const { s } of this.game.courses.sprocketMeshes) if (this.game.courses.seen.has(s.id)) dot(s.x, s.z, '#ffd21f', 2.5);
     const ng = this.game.courses.nextGate();
     if (ng) dot(ng.x, ng.z, '#ffffff', 5);
     for (const rp of this.game.net.players.values()) dot(rp.model.root.position.x, rp.model.root.position.z, rp.colors.frame, 4.5);
@@ -481,7 +559,7 @@ export class UI {
       c.fillRect(x - tw / 2, z - 30, tw, 26);
       c.fillStyle = zn.color; c.fillText(zn.name.toUpperCase(), x, z - 10);
     }
-    for (const { s } of g.courses.sprocketMeshes) { const [x, z] = this.worldToMap(s.x, s.z, W); c.fillStyle = '#ffd21f'; c.beginPath(); c.arc(x, z, 4, 0, 7); c.fill(); }
+    for (const { s } of g.courses.sprocketMeshes) { if (!g.courses.seen.has(s.id)) continue; const [x, z] = this.worldToMap(s.x, s.z, W); c.fillStyle = '#ffd21f'; c.beginPath(); c.arc(x, z, 4, 0, 7); c.fill(); }
     for (const m of g.courses.markers) { const [x, z] = this.worldToMap(m.course.start.x, m.course.start.z, W); c.strokeStyle = ZONES[m.course.zone].color; c.lineWidth = 3; c.beginPath(); c.arc(x, z, 7, 0, 7); c.stroke(); }
     for (const rp of g.net.players.values()) { const [x, z] = this.worldToMap(rp.model.root.position.x, rp.model.root.position.z, W); c.fillStyle = rp.colors.frame; c.beginPath(); c.arc(x, z, 7, 0, 7); c.fill(); c.fillStyle = '#fff'; c.fillText(rp.name, x, z - 12); }
     const [px, pz] = this.worldToMap(g.player.pos.x, g.player.pos.z, W);
@@ -526,7 +604,11 @@ export class UI {
     const ctv = cfrac.toFixed(2);
     if (cache.get('ct') !== ctv) { cache.set('ct', ctv); ct.style.transform = `scaleX(${ctv})`; }
     set(el.score, g.tricks.total.toLocaleString());
-    if (this.frame % 15 === 0) set(el.zone, g.zoneName());
+    if (this.frame % 15 === 0) {
+      set(el.zone, g.zoneName());
+      const zk = g.goals.zone, ng = zk && !g.courses.run ? g.goals.next(zk) : null;
+      set(this.goalEl || (this.goalEl = document.getElementById('hud-goal')), ng ? `Goal ${ng.tier}/5 · ${ng.desc}` : zk && !g.courses.run && g.goals.count(zk) === 5 ? 'All goals done here' : '');
+    }
     // combo
     const c = g.tricks.comboText();
     if (c) {
@@ -535,7 +617,7 @@ export class UI {
       set(el.comboScore, `${c.base.toLocaleString()} <em>×${c.mult}</em>`, true);
     } else cls(el.combo, 'on', false);
     // balance meter
-    const bal = p.grind ? p.grind.bal : p.manual ? p.manual.bal : null;
+    const bal = p.grind ? p.grind.bal : p.stall ? p.stall.bal : p.manual ? p.manual.bal : null;
     cls(el.balance, 'hidden', bal === null);
     if (bal !== null) {
       const i = el.balance.firstElementChild;
@@ -543,7 +625,7 @@ export class UI {
       const col = Math.abs(bal) > 0.7 ? '#ff3b3b' : Math.abs(bal) > 0.4 ? '#ffd21f' : '#57e08a';
       if (cache.get('balcol') !== col) { cache.set('balcol', col); i.style.background = col; }
       const dev = g.input.device(), L = (a) => g.input.label(a);
-      set(el.balance.lastElementChild, dev === 'kb' ? (p.grind ? `Balance  ${L('left')} / ${L('right')}` : `Balance  ${L('pedal')} / ${L('brake')}`) : (p.grind ? 'Balance · stick left / right' : 'Balance · stick up / down'));
+      set(el.balance.lastElementChild, dev === 'kb' ? (p.grind || p.stall ? `Balance  ${L('left')} / ${L('right')}` : `Balance  ${L('pedal')} / ${L('brake')}`) : (p.grind || p.stall ? 'Balance · stick left / right' : 'Balance · stick up / down'));
     }
     // course
     const r = g.courses.run;
@@ -580,6 +662,13 @@ export class UI {
         el.hints.textContent = '';
         for (const [k, t] of items) { if (!k) continue; const sp = document.createElement('span'); const kb = document.createElement('kbd'); kb.textContent = k; sp.append(kb, ' ' + t); el.hints.appendChild(sp); }
       }
+    }
+    // Game of BIKE banner
+    if (this.frame % 6 === 0) {
+      const be = this.bikeEl || (this.bikeEl = document.getElementById('hud-bike'));
+      const h = g.bike.hud();
+      cls(be, 'hidden', !h);
+      if (h) { set(be.children[0], h.line); set(be.children[1], h.board); cls(be, 'out', h.out); }
     }
     // prompt
     const pr = g.promptText();

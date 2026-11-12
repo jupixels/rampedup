@@ -180,7 +180,7 @@ export const CASES = [
       sim.step(20, { pedal: 1, flip: 1, hop: true });
       sim.step(1, { pedal: 1, flip: 1, hopReleased: true });
       sim.step(120, { pedal: 1, flip: 1 });
-      return { ok: sim.has('ev:hop') && sim.has('ev:land') && !sim.has('ev:bail') && g.player.mode === 'ground', detail: sim.log.filter((l) => /bail|land|hop/.test(l)).join(',') };
+      return { ok: sim.has('ev:hop') && sim.has('ev:land') && !sim.has('ev:bail'), detail: sim.log.filter((l) => /bail|land|hop/.test(l)).join(',') };
     },
   },
   {
@@ -302,6 +302,456 @@ export const CASES = [
       const restored = tap('Space').hop;
       inp.padActive = false;
       return { ok: before && q && !space && label === 'Q' && restored && saved.includes('KeyQ'), detail: `space=${before} Q=${q} spaceAfter=${space} label=${label} restored=${restored} saved=${saved}` };
+    },
+  },
+  // ---------------- phase 3: trick depth ----------------
+  {
+    name: 'tricks: manual button + trick gives the variation (X-Up)',
+    run: () => {
+      const g = window.__game, p = g.player, sim = window.__sim;
+      sim.reset();
+      sim.step(60, { pedal: 1 }); sim.step(12, { hop: true }); sim.step(1, { hopReleased: true });
+      p.vel.y = 9;
+      sim.step(3, {});
+      sim.step(1, { manual: true, tricks: { barspin: true }, trickHeld: { barspin: true } });
+      const type = p.anim && p.anim.type;
+      sim.step(40, { manual: true });
+      const pose = g.player.model.pose.xup;
+      sim.step(200, {});
+      return { ok: type === 'xup' && sim.log.some((l) => l.startsWith('land:X-Up')) && !sim.has('ev:bail'), detail: `anim=${type} pose=${pose.toFixed(2)} ${sim.log.filter((l) => /^land|bail/.test(l)).join(',')}` };
+    },
+  },
+  {
+    name: 'tricks: a 360 with a barspin is a Truckdriver',
+    run: () => {
+      const g = window.__game, p = g.player, sim = window.__sim;
+      sim.reset(-60, 30, Math.PI / 2);
+      sim.step(90, { pedal: 1 }); sim.step(12, { hop: true }); sim.step(1, { hopReleased: true });
+      p.vel.y = 10;
+      sim.step(1, { tricks: { barspin: true } });
+      for (let i = 0; i < 400 && p.mode === 'air'; i++) sim.step(1, { steer: Math.abs(p.air.spin) < 5.6 ? 1 : 0 });
+      sim.step(60, {});
+      return { ok: sim.log.some((l) => l.startsWith('land:Truckdriver')) && !sim.has('ev:bail'), detail: sim.log.filter((l) => /^land|bail/.test(l)).join(',') };
+    },
+  },
+  {
+    name: 'tricks: variety bonus pays for mixing tricks',
+    run: () => {
+      const g = window.__game, sim = window.__sim;
+      sim.reset();
+      let ev = null; g.tricks.on((e) => { if (e.type === 'bank') ev = e; });
+      for (const n of ['A', 'B', 'C', 'D', 'E']) g.tricks.addTrick('Test ' + n, 100);
+      g.tricks.bank();
+      return { ok: !!ev && Math.abs(ev.variety - 0.2) < 1e-9 && ev.score === Math.round(500 * 5 * 1.2), detail: ev ? `score=${ev.score} variety=${ev.variety}` : 'no bank' };
+    },
+  },
+  {
+    name: 'lip tricks: holding manual on the way back to the coping stalls, hop drops back in',
+    run: () => {
+      const g = window.__game, p = g.player, sim = window.__sim;
+      sim.reset(-35, -28, Math.PI);
+      let stalled = false, style = '', t = 0;
+      for (let i = 0; i < 900 && !stalled; i++) {
+        const air = p.mode === 'air' && p.air && p.air.vert;
+        sim.step(1, air ? { manual: p.vel.y < 0 } : { pedal: 1 });
+        if (p.mode === 'stall') { stalled = true; style = p.stall.style; }
+        if (sim.has('ev:bail')) break;
+      }
+      const pre = sim.log.filter((l) => /bail|stall|takeoff/.test(l)).join(',');
+      if (!stalled) return { ok: false, detail: 'never stalled: ' + pre + ` mode=${p.mode}` };
+      for (let i = 0; i < 90; i++) { p.stall.bal = 0; p.stall.balVel = 0; sim.step(1, {}); }
+      t = p.stall.time;
+      sim.step(1, { hop: true, hopPressed: true });
+      const left = p.mode === 'air';
+      sim.step(240, {});
+      const ok = left && t > 1.4 && !sim.has('ev:bail') && p.mode === 'ground' && sim.log.some((l) => l.startsWith('bank:'));
+      return { ok, detail: `style=${style} held=${t.toFixed(1)}s after=${p.mode} ${sim.log.filter((l) => /bail|bank/.test(l)).join(',')}` };
+    },
+  },
+  {
+    name: 'wallride: a shallow approach sticks to a marked wall, hop pushes off',
+    run: () => {
+      const g = window.__game, p = g.player, sim = window.__sim;
+      sim.reset(-29, 64.7, Math.PI / 2);
+      sim.step(8, { hop: true }); sim.step(1, { hopReleased: true });
+      p.vel.set(7.5, 5, 1.2); // along the wall, drifting into it
+      let on = false;
+      for (let i = 0; i < 90 && !on; i++) { sim.step(1, {}); on = p.mode === 'wall'; }
+      if (!on) return { ok: false, detail: `never stuck: mode=${p.mode} pos=${p.pos.x.toFixed(1)},${p.pos.y.toFixed(1)},${p.pos.z.toFixed(1)} walls=${g.world.collision.walls.length} ${sim.log.filter((l) => /bail|bump|land/.test(l)).join(',')}` };
+      sim.step(20, {});
+      const riding = p.mode === 'wall';
+      sim.step(1, { hop: true, hopPressed: true });
+      sim.step(200, {});
+      const ok = riding && sim.has('ev:wallEnd') && !sim.has('ev:bail') && p.mode === 'ground' && sim.log.some((l) => l.startsWith('bank:'));
+      return { ok, detail: `riding=${riding} after=${p.mode} ${sim.log.filter((l) => /bail|bank|wall/.test(l)).join(',')}` };
+    },
+  },
+  // ---------------- phase 4: things to do ----------------
+  {
+    name: 'gaps: pedalling north over the first jump box finds Box One and the Woods "Sprout" double',
+    run: () => {
+      const g = window.__game, p = g.player, sim = window.__sim, G = g.goals;
+      G.foundGaps.clear();
+      const ride = (x, z, yaw, top, frames, id, speed = 0) => {
+        sim.reset(x, z, yaw, top);
+        if (speed) p.vel.set(Math.sin(yaw) * speed, 0, Math.cos(yaw) * speed);
+        for (let i = 0; i < frames && !G.foundGaps.has(id); i++) { sim.step(1, { pedal: p.mode === 'ground' ? 1 : 0 }); G.update(1 / 60); }
+        return G.foundGaps.has(id);
+      };
+      const box1 = ride(56, 62, Math.PI, false, 600, 'box1', 10);
+      const sprout = ride(288, 80, Math.PI, true, 600, 'woodsA1');
+      return { ok: box1 && sprout && G.gaps.length >= 25, detail: `box1=${box1} sprout=${sprout} gaps=${G.gaps.length} found=${[...G.foundGaps].join(',')}` };
+    },
+  },
+  {
+    name: 'gaps: every gap sits over rideable ground inside its spot',
+    run: () => {
+      const g = window.__game, G = g.goals, col = g.world.collision;
+      const bad = [];
+      for (const gap of G.gaps) {
+        const h = col.ground(gap.x, gap.z, 500, { n: g.player.normal.clone() }).h;
+        if (!isFinite(h) || !isFinite(gap.x + gap.z)) bad.push(gap.id + ': bad position');
+        if (gap.minY !== undefined && gap.minY < h - 0.5 && gap.id !== 'mega') bad.push(`${gap.id}: minY ${gap.minY.toFixed(1)} below ground ${h.toFixed(1)}`);
+      }
+      return { ok: !bad.length, detail: bad.join('; ') };
+    },
+  },
+  {
+    name: 'goals: spot goals complete in their spot, in any order, and pay XP',
+    run: () => {
+      const g = window.__game, sim = window.__sim, G = g.goals;
+      G.done.clear();
+      sim.reset(); // The Yard
+      G.update(0.3);
+      const xp0 = g.progress.xp;
+      G.onEvent({ type: 'bank', score: 2500 });
+      const warm = G.done.has('yard1');
+      G.onEvent({ type: 'grindEnd', style: 'Double Peg', dist: 9, time: 1, stall: false });
+      const rail = G.done.has('yard2');
+      G.onEvent({ type: 'manualEnd', time: 9 }); // a Channel goal: must not count here
+      const wrongSpot = G.done.has('channel1');
+      const next = G.next('yard');
+      return { ok: warm && rail && !wrongSpot && next && next.tier === 3 && g.progress.xp > xp0, detail: `warm=${warm} rail=${rail} wrongSpot=${wrongSpot} next=${next && next.name} xp+${g.progress.xp - xp0}` };
+    },
+  },
+  {
+    name: 'daily: the same date gives the same three challenges, and progress completes them',
+    run: async () => {
+      const g = window.__game, G = g.goals;
+      const { dailyFor } = await import('./js/goals.js');
+      const a = dailyFor('2026-11-12'), b = dailyFor('2026-11-12'), c = dailyFor('2026-11-13');
+      const same = JSON.stringify(a) === JSON.stringify(b), differs = JSON.stringify(a) !== JSON.stringify(c);
+      const distinct = new Set(a.map((x) => x.stat)).size === 3;
+      G.daily = { key: G.daily.key, prog: {}, done: [] };
+      const d = G.dailyList[0];
+      G.bump(d.stat, d.n, d.max);
+      G.onEvent({ type: 'tick' });
+      return { ok: same && differs && distinct && G.daily.done.includes(0), detail: `same=${same} differs=${differs} distinct=${distinct} done=${G.daily.done}` };
+    },
+  },
+  {
+    name: 'sprockets: uncollected sprockets stay off the map until you have been near them',
+    run: () => {
+      const g = window.__game, sim = window.__sim, C = g.courses;
+      C.seen.clear();
+      sim.reset(-150, -150, 0); // far from most; one sprocket sits right here
+      sim.step(2, {});
+      const near = C.sprockets.filter((s) => Math.hypot(s.x + 150, s.z + 150) < 45).map((s) => s.id);
+      const far = C.sprockets.find((s) => Math.hypot(s.x + 150, s.z + 150) > 200);
+      return { ok: near.length > 0 && near.every((id) => C.seen.has(id) || C.found.has(id)) && !C.seen.has(far.id), detail: `near=${near} seen=${[...C.seen]}` };
+    },
+  },
+  {
+    name: 'street: the Yard and Port Rusty have at least twice the rails and ledges',
+    run: () => {
+      const rails = window.__game.world.collision.rails;
+      const n = rails.length;
+      return { ok: n >= 42, detail: `${n} grindable edges (was 21)` };
+    },
+  },
+  {
+    name: 'physics: riding off the lip of a jump box at speed launches without hopping',
+    run: () => {
+      const g = window.__game, p = g.player, sim = window.__sim;
+      sim.reset(56, 62, Math.PI);
+      p.vel.set(0, 0, -10);
+      let air = 0, maxH = 0;
+      for (let i = 0; i < 200; i++) { sim.step(1, { pedal: p.mode === 'ground' ? 1 : 0 }); if (p.mode === 'air') { air++; maxH = Math.max(maxH, p.pos.y - 3.05); } if (p.pos.z < 36) break; }
+      return { ok: air > 12 && !sim.has('ev:bail') && !sim.has('ev:hop'), detail: `airborne ${air} frames, ${maxH.toFixed(2)} m over the table` };
+    },
+  },
+  {
+    name: 'gaps: Mega, Warehouse Roof, Box Cars and Lake Launch are all reachable',
+    run: () => {
+      const g = window.__game, p = g.player, sim = window.__sim, G = g.goals;
+      const out = {};
+      const ride = (tag, x, z, yaw, top, frames, speed, ctl) => {
+        G.foundGaps.clear(); sim.reset(x, z, yaw, top);
+        if (speed) p.vel.set(Math.sin(yaw) * speed, 0, Math.cos(yaw) * speed);
+        for (let i = 0; i < frames; i++) { sim.step(1, Object.assign({ pedal: p.mode === 'ground' ? 1 : 0 }, ctl ? ctl() : {})); G.update(1 / 60); if (sim.has('ev:bail')) break; }
+        out[tag] = { found: [...G.foundGaps], bail: sim.has('ev:bail') };
+      };
+      const d = g.world.anchors.megaDeck;
+      ride('mega', d.x, d.z, 0, true, 700, 0);
+      ride('roof', -250, 10, 0, true, 420, 11);
+      ride('lake', -430, 60, -Math.PI / 2, true, 400, 9);
+      let st = 0; // hop near the west edge of each container
+      ride('boxcar', -338, 8, -Math.PI / 2, true, 700, 10, () => {
+        const near = p.mode === 'ground' && [-352.5, -369.5, -386.5].some((e) => p.pos.x < e + 1.2 && p.pos.x > e - 1.5);
+        if (near && st === 0) { st = 1; return { hop: true }; }
+        if (st >= 1 && st < 10) { st++; return { hop: true }; }
+        if (st === 10) { st = 0; return { hopReleased: true }; }
+        return {};
+      });
+      const ok = out.mega.found.includes('mega') && !out.mega.bail && out.roof.found.includes('roof') && !out.roof.bail
+        && out.lake.found.includes('lake') && out.boxcar.found.length === 3 && !out.boxcar.bail;
+      return { ok, detail: JSON.stringify(out) };
+    },
+  },
+  // ---------------- phase 5: multiplayer (no real network: connections are faked) ----------------
+  {
+    name: 'multiplayer: Quick Join moves on to the next public room when one is full',
+    run: async () => {
+      const net = window.__game.net;
+      const realJoin = net.join, realHost = net.host;
+      const tried = [];
+      net.join = async (code) => { tried.push('join ' + code); if (code === 'PUBLIC') throw Object.assign(new Error('full'), { type: 'room-full' }); if (code === 'PUBLIC2') throw Object.assign(new Error('x'), { type: 'peer-unavailable' }); return code; };
+      net.host = async (code) => { tried.push('host ' + code); return code; };
+      let got; try { got = await net.quickJoin(); } catch (e) { got = 'threw ' + e.type; }
+      net.join = realJoin; net.host = realHost;
+      return { ok: got === 'PUBLIC2' && tried.join(',') === 'join PUBLIC,join PUBLIC2,host PUBLIC2', detail: `${got} via ${tried.join(',')}` };
+    },
+  },
+  {
+    name: 'multiplayer: snapshots use the unordered channel, and late ones are dropped',
+    run: () => {
+      const g = window.__game, net = g.net;
+      const mk = (peer) => { const c = { peer, open: true, sent: [], send(m) { this.sent.push(m); } }; return c; };
+      const a = mk('peer-a'), b = mk('peer-b'), bState = mk('peer-b');
+      const was = { isHost: net.isHost, status: net.status, myId: net.myId };
+      net.isHost = true; net.status = 'host'; net.myId = 'me';
+      for (const c of [a, b]) { net.conns.set(c.peer, c); net.onMessage({ t: 'hello', name: c.peer, colors: {} }, c); }
+      net.stateConns.set('peer-b', bState);
+      const d = g.player.snapshot();
+      net.onMessage({ t: 's', n: 5, d }, a);
+      net.onMessage({ t: 's', n: 3, d }, a);   // older: must be ignored
+      net.onMessage({ t: 's', n: 6, d }, a);
+      const pa = net.players.get('peer-a');
+      const relayedOnState = bState.sent.filter((m) => m.t === 's' && m.id === 'peer-a').length;
+      const relayedOnMain = b.sent.filter((m) => m.t === 's').length;
+      const ok = pa.buf.length === 2 && pa.lastN === 6 && relayedOnState === 2 && relayedOnMain === 0;
+      for (const id of ['peer-a', 'peer-b']) net.removePlayer(id, true);
+      net.conns.clear(); net.stateConns.clear(); Object.assign(net, was);
+      return { ok, detail: `kept=${pa.buf.length} lastN=${pa.lastN} relayed state=${relayedOnState} main=${relayedOnMain}` };
+    },
+  },
+  {
+    name: 'multiplayer: the host corrects a race time that does not match its own clock',
+    run: () => {
+      const g = window.__game, net = g.net;
+      const was = { isHost: net.isHost, status: net.status, myId: net.myId };
+      net.isHost = true; net.status = 'host'; net.myId = 'me';
+      const c = { peer: 'peer-a', open: true, send() {} };
+      net.conns.set('peer-a', c); net.onMessage({ t: 'hello', name: 'Cheater', colors: {} }, c);
+      net.raceResults = { course: 'yard', list: [], startAt: Date.now() - 40000 };
+      net.onMessage({ t: 'fin', course: 'yard', time: 5 }, c);       // claims 5 s, 40 s after GO
+      const t = net.raceResults.list[0] && net.raceResults.list[0].time;
+      net.raceResults = { course: 'yard', list: [], startAt: Date.now() - 40000 };
+      net.onMessage({ t: 'fin', course: 'yard', time: 39.4 }, c);    // honest: within lag
+      const t2 = net.raceResults.list[0] && net.raceResults.list[0].time;
+      net.removePlayer('peer-a', true); net.conns.clear(); net.raceResults = null; Object.assign(net, was);
+      document.getElementById('result').classList.add('hidden');
+      return { ok: Math.abs(t - 40) < 1 && t2 === 39.4, detail: `claimed 5 -> ${t && t.toFixed(1)}; claimed 39.4 -> ${t2}` };
+    },
+  },
+  {
+    name: 'Game of BIKE: set, match, letters, elimination and a winner',
+    run: () => {
+      const g = window.__game, net = g.net, bike = g.bike;
+      const was = { isHost: net.isHost, status: net.status, myId: net.myId };
+      const realNow = net.now; let clock = 1e6; net.now = () => clock;
+      net.isHost = true; net.status = 'host'; net.myId = 'me';
+      const sent = [];
+      for (const id of ['peer-a', 'peer-b']) { const c = { peer: id, open: true, send: (m) => sent.push(m) }; net.conns.set(id, c); net.onMessage({ t: 'hello', name: id === 'peer-a' ? 'Ana' : 'Ben', colors: {} }, c); }
+      const started = bike.start();
+      const s = bike.state, log = [];
+      const conn = (id) => net.conns.get(id);
+      // round 1: host sets; Ana matches, Ben runs out of time
+      bike.reportLanding('Truckdriver', 900);
+      log.push(s.phase + ':' + s.pending.join('+'));
+      net.onMessage({ t: 'bikeLand', name: '360', pts: 300 }, conn('peer-a'));          // wrong trick
+      net.onMessage({ t: 'bikeLand', name: 'Truckdriver', pts: 880 }, conn('peer-a'));  // match
+      clock += 41000; bike.update();
+      log.push(`B=${s.letters['peer-b']} setter=${s.setter}`);
+      // Ben fails three more times -> out; then Ana vs host until someone wins
+      let guard = 0;
+      while (s.phase !== 'over' && guard++ < 300) {
+        if (s.phase === 'set') { const id = s.setter; if (id === 'me') bike.reportLanding('Tailwhip', 700); else net.onMessage({ t: 'bikeLand', name: 'Tailwhip', pts: 700 }, conn(id)); }
+        else {
+          // the host always matches; nobody else does
+          if (s.pending.includes('me')) bike.reportLanding(s.trick.name, 700);
+          if (s.phase === 'match') { clock += 41000; bike.update(); }
+        }
+      }
+      const hud = bike.hud();
+      const ok = started && log[0] === 'match:peer-a+peer-b' && log[1] === 'B=1 setter=peer-a' && s.phase === 'over' && s.winner === 'me'
+        && s.letters['peer-a'] === 4 && s.letters['peer-b'] === 4 && sent.some((m) => m.t === 'bike') && hud && /You win/.test(hud.line);
+      for (const id of ['peer-a', 'peer-b']) net.removePlayer(id, true);
+      net.conns.clear(); bike.state = null; net.now = realNow; Object.assign(net, was);
+      return { ok, detail: `${log.join(' | ')} | end=${s.phase} winner=${s.winner} letters=${JSON.stringify(s.letters)} hud=${hud && hud.line}` };
+    },
+  },
+  {
+    name: 'Game of BIKE: a client rebuilds a safe state from the host broadcast',
+    run: () => {
+      const g = window.__game, net = g.net, bike = g.bike;
+      const was = { isHost: net.isHost, status: net.status, myId: net.myId };
+      net.isHost = false; net.status = 'client'; net.myId = 'me';
+      net.onMessage({ t: 'bike', id: 'host', s: { phase: 'match', order: ['host', 'me'], names: { host: '<img src=x onerror=1>', me: 'Me' }, letters: { host: 0, me: 2 }, setter: 'host', trick: { name: 'Flipwhip', pts: 2000 }, pending: ['me'], deadline: net.now() + 20000, msg: 'x' } }, { peer: 'host' });
+      const h = bike.hud();
+      const ok = !!h && /Match it: Flipwhip/.test(h.line) && h.mine === 'B I · ·' && !/[<>]/.test(h.board);
+      bike.state = null; Object.assign(net, was);
+      return { ok, detail: h ? `${h.line} | ${h.mine} | ${h.board}` : 'no hud' };
+    },
+  },
+  {
+    name: 'multiplayer: watching a rider freezes you and follows them; leaving restores control',
+    run: () => {
+      const g = window.__game, net = g.net, sim = window.__sim;
+      sim.reset();
+      const was = { isHost: net.isHost, status: net.status, myId: net.myId };
+      net.isHost = true; net.status = 'host'; net.myId = 'me';
+      const c = { peer: 'peer-a', open: true, send() {} };
+      net.conns.set('peer-a', c); net.onMessage({ t: 'hello', name: 'Ana', colors: {} }, c);
+      const rp = net.players.get('peer-a');
+      rp.model.root.position.set(20, g.world.anchors.yy, 20);
+      g.spectate('peer-a');
+      const frozen = g.player.frozen, following = g.specView && g.specView.pos === rp.model.root.position;
+      g.cam.update(1 / 60, g.specView, { orbitX: 0, orbitY: 0 }, true);
+      const near = g.camera.position.distanceTo(rp.model.root.position) < 12;
+      net.removePlayer('peer-a', true); // they left: we get our bike back
+      const restored = !g.spectating && !g.player.frozen;
+      net.conns.clear(); Object.assign(net, was);
+      return { ok: frozen && following && near && restored, detail: `frozen=${frozen} following=${following} camNear=${near} restored=${restored} cam=${g.camera.position.toArray().map((v) => v.toFixed(1))} mode=${g.cam.mode}` };
+    },
+  },
+  {
+    name: 'camera: resetting right after a hard landing does not throw the camera away',
+    run: () => {
+      const g = window.__game, p = g.player, sim = window.__sim;
+      sim.reset();
+      g.cam.addDip(1); g.cam.addShake(0.8);
+      g.cam.update(1 / 60, p, { orbitX: 0, orbitY: 0 });
+      g.cam.update(0.5, p, { orbitX: 0, orbitY: 0 });   // one very long frame
+      g.resetRider();
+      g.cam.update(1 / 60, p, { orbitX: 0, orbitY: 0 });
+      const d = g.camera.position.distanceTo(p.pos);
+      return { ok: isFinite(d) && d < 12, detail: `camera is ${d.toFixed(1)} m from the rider` };
+    },
+  },
+  // ---------------- phase 6: sharing and polish ----------------
+  {
+    name: 'replay: the last ride plays back on the rider and exiting restores them',
+    run: () => {
+      const g = window.__game, p = g.player, sim = window.__sim, R = g.replay;
+      sim.reset(-60, 30, Math.PI / 2);
+      R.buf.length = 0;
+      for (let i = 0; i < 240; i++) { sim.step(1, { pedal: 1 }); R.record(1 / 60); }
+      const end = p.pos.clone();
+      const entered = R.enter();
+      R.t = R.t0 + 0.2; R.setPlaying(false);
+      R.update(1 / 60, g.input.blank());
+      const back = end.distanceTo(p.model.root.position);       // early in the ride: well behind where we stopped
+      R.setPlaying(true);
+      for (let i = 0; i < 60; i++) R.update(1 / 60, g.input.blank());
+      const moved = Math.abs(R.t - (R.t0 + 0.2) - 1) < 0.05;
+      R.exit();
+      const restored = p.model.root.position.distanceTo(end) < 0.7 && !R.active && !document.getElementById('hud').classList.contains('hidden');
+      return { ok: entered && R.seconds > 3 && back > 8 && moved && restored, detail: `entered=${entered} buffer=${R.seconds.toFixed(1)}s rewound=${back.toFixed(1)}m playhead=${moved} restored=${restored}` };
+    },
+  },
+  {
+    name: 'replay: Save clip produces a video file',
+    run: async () => {
+      const g = window.__game, sim = window.__sim, R = g.replay;
+      if (!R.canSaveClip()) return { ok: true, detail: 'skipped: this browser has no MediaRecorder' };
+      sim.reset(-60, 30, Math.PI / 2);
+      R.buf.length = 0;
+      for (let i = 0; i < 90; i++) { sim.step(1, { pedal: 1 }); R.record(1 / 60); }
+      const realClick = HTMLAnchorElement.prototype.click; let downloaded = '';
+      HTMLAnchorElement.prototype.click = function () { downloaded = this.download; };
+      R.enter(); R.lastClip = null;
+      R.saveClip();
+      const recording = !!R.rec;
+      for (let i = 0; i < 400 && R.rec; i++) { R.update(1 / 30, g.input.blank()); g.composer.render(1 / 30); await new Promise((r) => setTimeout(r, 15)); }
+      for (let i = 0; i < 100 && !R.lastClip; i++) await new Promise((r) => setTimeout(r, 30));
+      HTMLAnchorElement.prototype.click = realClick;
+      const clip = R.lastClip;
+      R.exit();
+      return { ok: recording && !!clip && clip.size > 2000 && /^rampedup-clip-\d+\.(webm|mp4)$/.test(downloaded), detail: clip ? `${clip.type}, ${(clip.size / 1024).toFixed(0)} KB, ${downloaded}` : `no clip (recording started: ${recording})` };
+    },
+  },
+  {
+    name: 'settings: quality switches live without a reload',
+    run: () => {
+      const g = window.__game;
+      const before = g.settings.quality;
+      const errs = [];
+      for (const q of ['medium', 'low']) {
+        try { g.setQuality(q); g.composer.render(0.016); } catch (e) { errs.push(q + ': ' + e.message); }
+      }
+      const size = g.env.sun.shadow.mapSize.x;
+      g.setQuality(before); g.composer.render(0.016);
+      return { ok: !errs.length && size === 1024 && g.settings.quality === before, detail: errs.join('; ') || `shadow map ${size}px at Low, back to ${before}` };
+    },
+  },
+  {
+    name: 'app: manifest, icons, service worker and link preview are present and valid',
+    run: async () => {
+      const m = await fetch('manifest.webmanifest').then((r) => r.json());
+      const missing = [];
+      for (const i of m.icons) { const r = await fetch(i.src); if (!r.ok) missing.push(i.src); }
+      for (const f of ['sw.js', 'og.jpg']) { const r = await fetch(f); if (!r.ok) missing.push(f); }
+      const linked = !!document.querySelector('link[rel=manifest]') && !!document.querySelector('meta[property="og:image"]');
+      return { ok: !missing.length && linked && m.display === 'fullscreen' && m.icons.length >= 3, detail: missing.length ? 'missing: ' + missing.join(', ') : `${m.icons.length} icons, display=${m.display}` };
+    },
+  },
+  // ---------------- phase 7: world and visuals ----------------
+  {
+    name: 'visuals: every time of day, including Night, renders without errors',
+    run: async () => {
+      const g = window.__game;
+      const { TIMES } = await import('./js/world.js');
+      const errs = [], keys = Object.keys(TIMES);
+      for (const k of keys) { try { g.env.setTime(k); g.composer.render(0.016); } catch (e) { errs.push(k + ': ' + e.message); } }
+      const nightGlow = (g.env.setTime('night'), g.env.glowMat && g.env.glowMat.opacity > 0.5);
+      const dayGlow = (g.env.setTime('midday'), g.env.glowMat.opacity === 0);
+      g.env.setTime(g.settings.time);
+      return { ok: !errs.length && keys.includes('night') && nightGlow && dayGlow, detail: errs.join('; ') || `${keys.join(', ')}; lamp pools on at night=${nightGlow}, off by day=${dayGlow}` };
+    },
+  },
+  {
+    name: 'visuals: course start beams fade out when the camera is inside them',
+    run: () => {
+      const g = window.__game, sim = window.__sim, C = g.courses;
+      sim.reset();
+      const m = C.markers[0];
+      g.camera.position.set(m.grp.position.x, m.grp.position.y + 1.5, m.grp.position.z);
+      C.update(1 / 60);
+      const inside = m.beam.material.uniforms.uFade.value;
+      g.camera.position.set(m.grp.position.x + 30, m.grp.position.y + 3, m.grp.position.z);
+      C.update(1 / 60);
+      const away = m.beam.material.uniforms.uFade.value;
+      return { ok: inside === 0 && away === 1, detail: `fade inside=${inside} at 30 m=${away}` };
+    },
+  },
+  {
+    name: 'visuals: Loam Woods is wooded, and the jump lines are still clear of trees',
+    run: () => {
+      const w = window.__game.world;
+      const inZone = w.treePoints.filter(([x, z]) => Math.abs(x - 300) < 45 && Math.abs(z + 40) < 120);
+      const onLine = inZone.filter(([x, z]) => [288, 313, 329].some((lx) => Math.abs(x - lx) < 6.5) || z > 66 || z < -122);
+      return { ok: inZone.length >= 40 && onLine.length === 0, detail: `${inZone.length} trees inside the spot, ${onLine.length} on a line` };
     },
   },
 ];

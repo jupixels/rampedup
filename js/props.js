@@ -211,7 +211,7 @@ export class Builder {
       case 'plywood': m = pbr('planks', { roughness: 1, color: 0xd8c8b0 }); break;
       case 'deck': m = pbr('deck', { roughness: 1 }); break;
       case 'wood': m = pbr('planks', { roughness: 1 }); break;
-      case 'concrete': m = pbr('concrete', { roughness: 1 }); break;
+      case 'concrete': m = pbr('concrete', { roughness: 1, color: 0xc9cbcf }); break;
       case 'concreteSmooth': m = pbr('concreteSmooth', { roughness: 1 }); break;
       case 'concreteDark': m = pbr('concreteDark', { roughness: 1 }); break;
       case 'asphalt': m = pbr('asphalt', { roughness: 1 }); break;
@@ -408,6 +408,12 @@ export class Builder {
       const cm = this.matrix(x, y + (sy ? H - 0.06 : 0.06), z, yaw).multiply(new THREE.Matrix4().makeTranslation(sx * (L / 2 - 0.09), 0, sz * (W / 2 - 0.09)));
       this.add(cg, 'steel', cm, { cast: false });
     }
+    // both long sides can be wallridden
+    const ux = Math.cos(yaw), uz = -Math.sin(yaw), nx = Math.sin(yaw), nz = Math.cos(yaw);
+    for (const s of [-1, 1]) {
+      const cx = x + nx * s * W / 2, cz = z + nz * s * W / 2;
+      this.col.addWall(cx - ux * L / 2, cz - uz * L / 2, cx + ux * L / 2, cz + uz * L / 2, y, y + H, nx * s, nz * s);
+    }
     return { top: y + H };
   }
 
@@ -421,6 +427,9 @@ export class Builder {
     this.add(head, 'steel', this.matrix(x, y + h - 0.05, z, yaw).multiply(new THREE.Matrix4().makeTranslation(1.05, 0, 0)));
     const bulb = new THREE.BoxGeometry(0.5, 0.03, 0.22);
     this.add(bulb, 'lamp', this.matrix(x, y + h - 0.125, z, yaw).multiply(new THREE.Matrix4().makeTranslation(1.05, 0, 0)), { cast: false });
+    // where the light lands (the world adds a soft pool of light here for dusk and night)
+    const lp = new THREE.Vector3(1.6, 0, 0).applyMatrix4(this.matrix(x, y, z, yaw));
+    (this.lampSpots = this.lampSpots || []).push([lp.x, this.col.ground(lp.x, lp.z, y + 3, { n: new THREE.Vector3() }).h, lp.z, h * 2.6]);
   }
 
   bench(x, z, yaw = 0) {
@@ -441,9 +450,36 @@ export class Builder {
     this.scene.add(mesh);
   }
 
+  // Painted ground: a flat coloured patch (zones, lanes, lines). Purely visual.
+  paint(x, z, w, d, color, opacity = 0.3, yaw = 0, y = null) {
+    const key = color + ':' + opacity;
+    this.paints = this.paints || {};
+    const mat = this.paints[key] || (this.paints[key] = new THREE.MeshStandardMaterial({ color, transparent: true, opacity, roughness: 0.85, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d).rotateX(-Math.PI / 2), mat);
+    m.position.set(x, (y ?? this.groundY(x, z)) + 0.012, z);
+    m.rotation.y = yaw;
+    m.receiveShadow = true; m.matrixAutoUpdate = false; m.updateMatrix();
+    this.scene.add(m);
+    return m;
+  }
+
+  // A flag on a pole that waves in the wind (the world supplies the waving material).
+  flag(x, z, color, h = 6.5, yaw = 0) {
+    const y = this.groundY(x, z);
+    this.add(new THREE.CylinderGeometry(0.05, 0.07, h, 8), 'steel', new THREE.Matrix4().makeTranslation(x, y + h / 2, z));
+    (this.flags = this.flags || []).push({ x, y: y + h - 0.75, z, color, yaw });
+  }
+
   graffitiWall(x, z, yaw, w = 8, h = 2.4, idx = 0) {
     const y = this.groundY(x, z);
     const r = this.box({ x, z, y, w, h, d: 0.4, yaw, mat: 'concreteDark', surface: 'concrete', tile: 3 });
+    {
+      const ux = Math.cos(yaw), uz = -Math.sin(yaw), nx = Math.sin(yaw), nz = Math.cos(yaw);
+      for (const s of [-1, 1]) {
+        const cx = x + nx * s * 0.2, cz = z + nz * s * 0.2;
+        this.col.addWall(cx - ux * w / 2, cz - uz * w / 2, cx + ux * w / 2, cz + uz * w / 2, y, y + h, nx * s, nz * s);
+      }
+    }
     const tex = graffitiTexture(idx);
     const mat = new THREE.MeshStandardMaterial({ map: tex, transparent: true, roughness: 0.85, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
     for (const s of [-1, 1]) {

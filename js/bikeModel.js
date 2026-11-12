@@ -115,10 +115,29 @@ function solveIK(a, target, l1, l2, pole, outMid) {
   return outMid;
 }
 
+// Jersey print: side panels, a chest band and a number. Drawn light on white so the jersey
+// colour (the material colour) tints it.
+let jerseyTex = null;
+function jerseyTexture() {
+  if (jerseyTex) return jerseyTex;
+  const c = document.createElement('canvas'); c.width = 256; c.height = 256;
+  const g = c.getContext('2d');
+  g.fillStyle = '#ffffff'; g.fillRect(0, 0, 256, 256);
+  g.fillStyle = 'rgba(0,0,0,0.42)';
+  for (const u of [0.25, 0.75]) g.fillRect(u * 256 - 16, 0, 32, 256);       // side panels
+  g.fillStyle = 'rgba(0,0,0,0.3)'; g.fillRect(0, 96, 256, 14);               // band
+  g.fillStyle = 'rgba(255,255,255,1)'; g.fillRect(0, 110, 256, 5);
+  g.font = '900 78px "Barlow Condensed", "Arial Narrow", Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  for (const u of [0, 0.5, 1]) { g.fillStyle = 'rgba(0,0,0,0.6)'; g.fillText('7', u * 256 + 2, 172); g.fillStyle = '#ffffff'; g.fillText('7', u * 256, 170); }
+  jerseyTex = new THREE.CanvasTexture(c);
+  jerseyTex.colorSpace = THREE.SRGBColorSpace; jerseyTex.wrapS = THREE.RepeatWrapping;
+  return jerseyTex;
+}
+
 export class RiderBike {
   constructor(colors = {}) {
     this.root = new THREE.Group();
-    this.colors = { frame: '#ff5a1f', helmet: '#f2f2f2', shirt: '#1d2b3a', pants: '#2a2a2a', ...colors };
+    this.colors = { frame: '#ff5a1f', helmet: '#f2f2f2', shirt: '#2f6fd6', pants: '#262a31', ...colors };
     const tread = treadTexture();
     const mats = this.mats = {
       frame: new THREE.MeshPhysicalMaterial({ color: this.colors.frame, metalness: 0.45, roughness: 0.32, clearcoat: 1, clearcoatRoughness: 0.12 }),
@@ -132,6 +151,7 @@ export class RiderBike {
       seat: new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.6 }),
       grip: new THREE.MeshStandardMaterial({ color: 0x0e0e0e, roughness: 0.95 }),
       shirt: new THREE.MeshStandardMaterial({ color: this.colors.shirt, roughness: 0.92 }),
+      jersey: new THREE.MeshStandardMaterial({ color: this.colors.shirt, roughness: 0.9, map: jerseyTexture() }),
       pants: new THREE.MeshStandardMaterial({ color: this.colors.pants, roughness: 0.95 }),
       skin: new THREE.MeshStandardMaterial({ color: 0xc89878, roughness: 0.7 }),
       helmet: new THREE.MeshPhysicalMaterial({ color: this.colors.helmet, roughness: 0.25, clearcoat: 1, clearcoatRoughness: 0.08 }),
@@ -273,7 +293,7 @@ export class RiderBike {
     mats.pad = new THREE.MeshStandardMaterial({ color: 0x2b2d31, roughness: 0.6 });
     const knee = () => new THREE.Mesh(new THREE.SphereGeometry(0.068, 12, 10), mats.pad);
     this.parts = {
-      torso: new THREE.Mesh(torsoGeo, mats.shirt),
+      torso: new THREE.Mesh(torsoGeo, mats.jersey),
       neck: cap(0.05, 0.12, mats.skin),
       head: new THREE.Group(),
       uArm: [cap(0.052, 0.3, mats.shirt), cap(0.052, 0.3, mats.shirt)],
@@ -316,7 +336,7 @@ export class RiderBike {
     this.root.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
 
     // state
-    this.pose = { crank: 0, steer: 0, barspin: 0, whip: 0, crouch: 0, shift: 0, superman: 0, nohander: 0, cancan: 0, nofooter: 0, tuck: 0, wheel: 0 };
+    this.pose = { crank: 0, steer: 0, barspin: 0, whip: 0, crouch: 0, shift: 0, superman: 0, nohander: 0, cancan: 0, nofooter: 0, tuck: 0, wheel: 0, xup: 0, turndown: 0, tucknh: 0, seat: 0, onefoot: 0 };
     this._v = Array.from({ length: 12 }, () => new THREE.Vector3());
     this.nameTag = null;
     this.setColors({});
@@ -335,7 +355,7 @@ export class RiderBike {
     };
     finish(M.frame, C.frameFinish, C.frame);
     finish(M.helmet, C.helmetFinish, C.helmet);
-    M.shirt.color.set(C.shirt);
+    M.shirt.color.set(C.shirt); M.jersey.color.set(C.shirt);
     M.pants.color.set(C.pants);
     if (C.rims) { M.rim.color.set(C.rims); M.rim.metalness = C.rimsFinish === 'metal' ? 1 : 0.8; M.rim.roughness = C.rimsFinish === 'metal' ? 0.2 : 0.3; }
     if (C.tires) M.tire.color.set(C.tires);
@@ -344,6 +364,12 @@ export class RiderBike {
       const shiny = ['#d8d8dc', '#e8e8ea'].includes(C.bars);
       M.bar.metalness = shiny ? 1 : 0.35; M.bar.roughness = shiny ? 0.15 : 0.35;
     }
+    // level 16+ parts
+    if (C.pegs) { M.peg.color.set(C.pegs); M.peg.metalness = C.pegsFinish === 'matte' ? 0.3 : 1; M.peg.roughness = C.pegsFinish === 'matte' ? 0.6 : 0.25; }
+    if (C.seat) M.seat.color.set(C.seat);
+    if (C.grips) M.grip.color.set(C.grips);
+    if (C.shoes) M.shoe.color.set(C.shoes);
+    if (C.gloves) M.glove.color.set(C.gloves);
   }
 
   // Free this model's GPU resources (remote riders and ghosts come and go).
@@ -382,7 +408,7 @@ export class RiderBike {
   updatePose() {
     const P = this.pose;
     this.forkPivot.rotation.y = P.steer;
-    this.barPivot.rotation.y = P.steer + P.barspin;
+    this.barPivot.rotation.y = P.steer + P.barspin + P.xup * 1.75 + P.turndown * 1.45;
     this.whipPivot.rotation.y = P.whip;
     this.crankSpin.rotation.x = P.crank;
     this.rearSpin.rotation.x = P.wheel;
@@ -400,9 +426,10 @@ export class RiderBike {
 
     const crouch = P.crouch, shift = P.shift;
     const sm = P.superman, nh = P.nohander, cc = P.cancan, nf = P.nofooter, tk = P.tuck;
+    const tn = P.tucknh, st = P.seat, of = P.onefoot, td = P.turndown;
     // pelvis & chest
     const pelvis = v[4].set(0, 1.0 - crouch * 0.25 + sm * 0.08 - tk * 0.12, -0.16 - crouch * 0.08 - shift * 0.22 - sm * 0.3);
-    const chest = v[5].set(0, pelvis.y + 0.42 - crouch * 0.1 - sm * 0.28 + nh * 0.05, pelvis.z + 0.2 + crouch * 0.06 + sm * 0.3 - shift * 0.08 - nh * 0.12);
+    const chest = v[5].set(td * 0.1, pelvis.y + 0.42 - crouch * 0.1 - sm * 0.28 + nh * 0.05 - tn * 0.2 - td * 0.1, pelvis.z + 0.2 + crouch * 0.06 + sm * 0.3 - shift * 0.08 - nh * 0.12 + tn * 0.16 + td * 0.06);
     const spineDir = v[6].subVectors(chest, pelvis).normalize();
     const place = (mesh, a, b) => {
       mesh.position.copy(a).add(b).multiplyScalar(0.5);
@@ -430,6 +457,10 @@ export class RiderBike {
       let hand = grip[i].clone();
       // no-hander: arms out wide
       if (nh > 0) hand.lerp(V(s * 0.75, chest.y + 0.35, chest.z - 0.1), nh);
+      // tuck no-hander: chest down on the bars, arms out low and wide
+      if (tn > 0) hand.lerp(V(s * 0.8, chest.y + 0.02, chest.z + 0.02), tn);
+      // seat grab: one hand reaches back to the seat
+      if (st > 0 && i === 0) hand.lerp(V(-0.03, 0.84, -0.24), st);
       if (P.barspin && Math.abs(Math.sin(P.barspin / 2)) > 0.2) hand.lerp(V(s * 0.25, grip[i].y + 0.05, grip[i].z - 0.1), 0.6);
       const elbow = solveIK(shoulder, hand, 0.3, 0.3, V(s * 0.8, -0.3, -0.6), V());
       J.shoulder[i].copy(shoulder); J.elbow[i].copy(elbow); J.hand[i].copy(hand);
@@ -443,6 +474,7 @@ export class RiderBike {
       if (sm > 0) foot.lerp(V(s * 0.16, pelvis.y + 0.05, pelvis.z - 0.85), sm);
       if (nf > 0) foot.lerp(V(s * 0.5, 0.55, -0.15), nf);
       if (cc > 0 && i === 1) foot.lerp(V(-0.38, 0.7, 0.18), cc);
+      if (of > 0 && i === 1) foot.lerp(V(0.6, 0.5, -0.05), of);
       if (tk > 0) foot.lerp(V(s * 0.12, pelvis.y - 0.3, pelvis.z + 0.25), tk * 0.6);
       const knee = solveIK(hip, foot, 0.45, 0.46, V(s * 0.12, 0.2, 1), V());
       J.hip[i].copy(hip); J.knee[i].copy(knee); J.foot[i].copy(foot);

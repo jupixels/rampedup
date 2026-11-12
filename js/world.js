@@ -11,10 +11,12 @@ import { getTex, leafTexture, pineTexture, waterNormalTexture, preloadTextures }
 
 // ---------------- Environment ----------------
 export const TIMES = {
-  golden:   { label: 'Golden Hour', elev: 17, azim: 228, turb: 4.5, ray: 1.9, mie: 0.0025, mieG: 0.7, sun: 0xffd6a8, sunI: 2.1, hemiSky: 0x9fb8e8, hemiGround: 0x5a4a36, hemiI: 0.42, fog: 0xbfb3a4, fogD: 0.0008, exp: 0.72, env: 0.15, cloud: [1.0, 0.86, 0.72] },
-  midday:   { label: 'Midday',      elev: 58, azim: 160, turb: 3.2, ray: 1.1, mie: 0.0025, mieG: 0.7,  sun: 0xfff4e6, sunI: 2.0, hemiSky: 0xa9c8ef, hemiGround: 0x5d5642, hemiI: 0.42, fog: 0xb4c9de, fogD: 0.0007, exp: 0.58, env: 0.2, cloud: [1, 1, 1] },
-  sunset:   { label: 'Sunset',      elev: 3.2, azim: 248, turb: 8.5, ray: 2.8, mie: 0.005, mieG: 0.78, sun: 0xff9e62, sunI: 1.5, hemiSky: 0x8a8fc4, hemiGround: 0x4a3830, hemiI: 0.38, fog: 0xc89a84, fogD: 0.001, exp: 0.85, env: 0.13, cloud: [1.0, 0.62, 0.5] },
-  overcast: { label: 'Overcast',    elev: 40, azim: 190, turb: 18, ray: 0.35, mie: 0.04, mieG: 0.7,   sun: 0xe8ecf0, sunI: 0.6, hemiSky: 0xc9d1da, hemiGround: 0x5a5a52, hemiI: 0.9, fog: 0xaeb4ba, fogD: 0.0016, exp: 0.78, env: 0.45, cloud: [0.78, 0.8, 0.83] },
+  golden:   { label: 'Golden Hour', elev: 17, azim: 228, turb: 3.4, ray: 1.9, mie: 0.002, mieG: 0.72, sun: 0xffd3a0, sunI: 2.1, hemiSky: 0xb3c4e6, hemiGround: 0x6b5a44, hemiI: 0.6, fog: 0xd9c3a2, fogD: 0.00042, exp: 0.74, env: 0.38, cloud: [1.0, 0.86, 0.72], glow: 0.25, ridge: 0xcaa98a },
+  midday:   { label: 'Midday',      elev: 58, azim: 160, turb: 2.0, ray: 1.5, mie: 0.0012, mieG: 0.7, sun: 0xfff6ea, sunI: 2.0, hemiSky: 0xc4d6ee, hemiGround: 0x6a6248, hemiI: 0.55, fog: 0xc3d5e6, fogD: 0.00032, exp: 0.58, env: 0.4, cloud: [1, 1, 1], glow: 0, ridge: 0x9db4cc },
+  sunset:   { label: 'Sunset',      elev: 4.5, azim: 248, turb: 7, ray: 2.8, mie: 0.005, mieG: 0.78, sun: 0xff9a5c, sunI: 1.8, hemiSky: 0x9a98cc, hemiGround: 0x5a4438, hemiI: 0.75, fog: 0xd29c82, fogD: 0.00055, exp: 0.92, env: 0.42, cloud: [1.0, 0.62, 0.5], glow: 0.7, ridge: 0x8a5f6e },
+  overcast: { label: 'Overcast',    elev: 40, azim: 190, turb: 18, ray: 0.35, mie: 0.04, mieG: 0.7, sun: 0xe8ecf0, sunI: 0.8, hemiSky: 0xcfd6de, hemiGround: 0x62625a, hemiI: 1.0, fog: 0xb6bcc2, fogD: 0.0009, exp: 0.8, env: 0.5, cloud: [0.78, 0.8, 0.83], glow: 0, ridge: 0x8e979f },
+  // floodlit night session: moonlight from above, lamps pool light on the ground
+  night:    { label: 'Night',       elev: 48, azim: 140, turb: 2, ray: 0.3, mie: 0.001, mieG: 0.7, sun: 0x9fb6ff, sunI: 1.3, hemiSky: 0x33456e, hemiGround: 0x14161d, hemiI: 1.7, fog: 0x0b1222, fogD: 0.0006, exp: 1.5, env: 0.7, cloud: [0.2, 0.24, 0.34], glow: 1, ridge: 0x0f1626, night: true },
 };
 
 export class Environment {
@@ -24,6 +26,11 @@ export class Environment {
     this.sky = new Sky();
     this.sky.scale.setScalar(20000);
     this.sky.material.depthWrite = false;
+    // The stock sky is far brighter than anything else in the scene. Left alone it tone-maps to
+    // white and feeds the bloom, which laid a milky veil over the frame. Scale it down and cap it
+    // below the bloom threshold: the sky keeps its colour and distant things keep their contrast.
+    this.sky.material.fragmentShader = this.sky.material.fragmentShader.replace('gl_FragColor = vec4( texColor, 1.0 );', 'gl_FragColor = vec4( min( texColor * 0.5, vec3( 2.8 ) ), 1.0 );');
+    this.sky.material.needsUpdate = true;
     scene.add(this.sky);
     this.sun = new THREE.DirectionalLight(0xffffff, 3);
     this.sun.castShadow = quality.shadows > 0;
@@ -43,6 +50,10 @@ export class Environment {
     this.pmrem = new THREE.PMREMGenerator(renderer);
     this.clouds = this.makeClouds();
     scene.add(this.clouds);
+    this.ridges = makeRidges();
+    scene.add(this.ridges);
+    this.nightSky = new THREE.Color(0x070b16);
+    this.glow = 0; // how strongly lamps light the ground (0 by day, 1 at night)
   }
 
   makeClouds() {
@@ -82,6 +93,11 @@ export class Environment {
     const u = this.sky.material.uniforms;
     u.turbidity.value = t.turb; u.rayleigh.value = t.ray;
     u.mieCoefficient.value = t.mie; u.mieDirectionalG.value = t.mieG;
+    this.sky.visible = !t.night;
+    this.scene.background = t.night ? this.nightSky : null;
+    this.glow = t.glow || 0;
+    this.ridges.material.color.set(t.ridge);
+    for (const m of this.glowMats || []) m.opacity = this.glow * m.userData.base;
     const phi = THREE.MathUtils.degToRad(90 - t.elev), theta = THREE.MathUtils.degToRad(t.azim);
     this.sunDir.setFromSphericalCoords(1, phi, theta);
     u.sunPosition.value.copy(this.sunDir);
@@ -97,7 +113,7 @@ export class Environment {
     const sky2 = new Sky();
     sky2.scale.setScalar(1000);
     Object.keys(u).forEach((k) => { if (sky2.material.uniforms[k]) sky2.material.uniforms[k].value = u[k].value.clone ? u[k].value.clone() : u[k].value; });
-    envScene.add(sky2);
+    if (t.night) envScene.background = new THREE.Color(0x0a1020); else envScene.add(sky2);
     const ground = new THREE.Mesh(new THREE.CircleGeometry(900, 16).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: new THREE.Color(t.hemiGround).multiplyScalar(1.2) }));
     ground.position.y = -40;
     envScene.add(ground);
@@ -117,6 +133,7 @@ export class Environment {
     this.sun.target.updateMatrixWorld();
     this.clouds.material.uniforms.uTime.value += dt;
     this.clouds.position.x = focus.x; this.clouds.position.z = focus.z;
+    this.ridges.position.set(focus.x, 0, focus.z);
   }
 }
 
@@ -251,6 +268,51 @@ function addWind(mat, strength = 0.12) {
   };
 }
 
+// Distant ridgelines: three painted layers on a huge cylinder, each paler than the one in front,
+// so the horizon reads as depth instead of a single saw-tooth edge.
+function makeRidges() {
+  const c = document.createElement('canvas'); c.width = 2048; c.height = 256;
+  const g = c.getContext('2d');
+  const r = rng(909);
+  const layer = (base, amp, alpha, rough) => {
+    const ph = [r() * 6.28, r() * 6.28, r() * 6.28, r() * 6.28];
+    g.fillStyle = `rgba(255,255,255,${alpha})`;
+    g.beginPath(); g.moveTo(0, 256);
+    for (let x = 0; x <= 2048; x += 4) {
+      const u = (x / 2048) * Math.PI * 2;
+      const y = base - amp * (0.5 * Math.sin(u * 3 + ph[0]) + 0.3 * Math.sin(u * 7 + ph[1]) + 0.14 * Math.sin(u * 17 + ph[2]) + rough * Math.sin(u * 41 + ph[3]));
+      g.lineTo(x, y);
+    }
+    g.lineTo(2048, 256); g.closePath(); g.fill();
+  };
+  layer(120, 60, 0.38, 0.05);
+  layer(160, 46, 0.55, 0.06);
+  layer(200, 30, 0.8, 0.04);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace; t.wrapS = THREE.RepeatWrapping;
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(4200, 4200, 900, 64, 1, true), new THREE.MeshBasicMaterial({ map: t, transparent: true, side: THREE.BackSide, depthWrite: false, fog: false }));
+  m.position.y = 0; m.renderOrder = -5; m.frustumCulled = false;
+  m.geometry.translate(0, 330, 0);
+  return m;
+}
+
+// Soft pools of light on the ground under lamps (only visible towards dusk and at night).
+export function lampGlows(scene, env, spots) {
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const g = c.getContext('2d'); const gr = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  gr.addColorStop(0, 'rgba(255,236,190,0.85)'); gr.addColorStop(0.5, 'rgba(255,220,160,0.3)'); gr.addColorStop(1, 'rgba(255,210,140,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
+  const mat = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, polygonOffset: true, polygonOffsetFactor: -3 });
+  mat.userData.base = 0.95;
+  env.glowMat = mat; env.glowMats = [mat];
+  // one instanced mesh for every lamp: a single draw call
+  const mesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), mat, spots.length);
+  const m4 = new THREE.Matrix4();
+  spots.forEach(([x, y, z, size], k) => mesh.setMatrixAt(k, m4.makeScale(size, 1, size).setPosition(x, y + 0.03, z)));
+  mesh.frustumCulled = false;
+  scene.add(mesh);
+}
+
 function scatterTrees(scene, terrain, world, quality) {
   const r = rng(4242);
   const bark = getTex('bark');
@@ -265,8 +327,13 @@ function scatterTrees(scene, terrain, world, quality) {
   const blocked = (x, z) => {
     for (const zn of Object.values(ZONES)) {
       if (Math.abs(x - zn.x) < zn.hx + 6 && Math.abs(z - zn.z) < zn.hz + 6) {
-        // Loam Woods keeps trees between the lines
-        if (zn === ZONES.woods && (Math.abs(x - zn.x) > 32 && Math.abs(x - zn.x) < zn.hx + 6)) return false;
+        // Loam Woods is a forest: trees everywhere except a clear corridor along each jump line,
+        // the roll-in mound, the turnaround wall and the return path
+        if (zn === ZONES.woods) {
+          if (z > 66 || z < -122) return true;
+          for (const lx of [288, 313, 329]) if (Math.abs(x - lx) < 7.5) return true;
+          return false;
+        }
         return true;
       }
     }
@@ -276,6 +343,23 @@ function scatterTrees(scene, terrain, world, quality) {
     }
     return false;
   };
+  const place = (x, z, forceKind = null) => {
+    const h = terrain.sample(x, z);
+    const alpine = h > 40 || r() < 0.18;
+    const kind = forceKind ?? (alpine ? 3 + (r() < 0.5 ? 0 : 1) : Math.floor(r() * 3));
+    const sc = 0.8 + r() * 0.55;
+    lists[kind].push(new THREE.Matrix4().compose(new THREE.Vector3(x, h - 0.1, z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), r() * Math.PI * 2), new THREE.Vector3(sc, sc * (0.9 + r() * 0.3), sc)));
+    world.treePoints.push([x, z]);
+  };
+  {
+    // Loam Woods: fill the strips between the lines so it finally feels like woods
+    const Zw = ZONES.woods, want = Math.round(Math.min(260, quality.trees * 0.14)), pts = [];
+    for (let k = 0; k < want * 30 && pts.length < want; k++) {
+      const x = Zw.x + (r() * 2 - 1) * (Zw.hx + 30), z = Zw.z + (r() * 2 - 1) * (Zw.hz + 20);
+      if (blocked(x, z) || pts.some((p) => Math.hypot(p[0] - x, p[1] - z) < 3.2)) continue;
+      pts.push([x, z]); place(x, z);
+    }
+  }
   let tries = 0;
   const half = WORLD.size / 2 - 40;
   while ((lists.reduce((a, l) => a + l.length, 0)) < total && tries < total * 12) {
@@ -283,7 +367,8 @@ function scatterTrees(scene, terrain, world, quality) {
     const x = (r() * 2 - 1) * half, z = (r() * 2 - 1) * half;
     const dens = terrain.noise(x / 160, z / 160) * 0.5 + 0.5;
     const nearWoods = Math.abs(x - ZONES.woods.x) < 110 && Math.abs(z - ZONES.woods.z) < 170;
-    if (r() > dens * dens * 1.6 + (nearWoods ? 0.6 : 0)) continue;
+    const inWoods = Math.abs(x - ZONES.woods.x) < ZONES.woods.hx + 6 && Math.abs(z - ZONES.woods.z) < ZONES.woods.hz + 6;
+    if (r() > dens * dens * 1.6 + (nearWoods ? 0.6 : 0) + (inWoods ? 1 : 0)) continue;
     const h = terrain.sample(x, z);
     if (h < WORLD.waterLevel + 0.6) continue;
     const n = terrain.normal(x, z);
@@ -533,6 +618,45 @@ function buildYard(B, A) {
   B.ramp(profiles.rollers(40, 0.55, 5), { x: -62, z: 56, y: yy, yaw: Math.PI / 2, width: 3.6, top: 'concreteSmooth', side: 'concreteDark', surface: 'concrete', tile: 3 });
   // bank wall south-east
   B.ramp(profiles.bank(1.6, 2.6, 2), { ...sk, x: 30, z: 60, yaw: 0, width: 14 });
+  // ---- street plaza (east of the funbox) ----
+  const V3 = (x, y, z) => new THREE.Vector3(x, y, z);
+  B.box({ x: 30, z: -4, y: yy, w: 0.9, h: 0.5, d: 16, mat: 'concreteSmooth', ledge: true, tile: 3 });          // long ledge
+  B.box({ x: 38, z: 10, y: yy, w: 0.8, h: 0.75, d: 8, mat: 'concreteSmooth', ledge: true, tile: 3 });           // tall ledge
+  B.box({ x: 41, z: -20, y: yy, w: 6, h: 0.3, d: 10, mat: 'concreteSmooth', ledge: true, tile: 3 });            // big manual pad
+  B.rail(V3(14, yy + 0.45, -18), V3(26, yy + 0.45, -18), { mat: 'railBlack' });                                 // flat bar
+  B.rail(V3(18, yy + 0.75, 12), V3(30, yy + 0.75, 12), { mat: 'railRed' });                                     // high rail
+  B.rail(V3(12, yy + 0.4, 5), V3(17.5, yy + 0.95, 5), { mat: 'railYellow', postEvery: 2 });                     // A-frame: up…
+  B.rail(V3(17.5, yy + 0.95, 5), V3(23, yy + 0.4, 5), { mat: 'railYellow', postEvery: 2 });                     // …and down
+  B.ramp(profiles.kicker(0.55, 24), { ...sk, x: 30, z: 9, yaw: Math.PI, width: 2.4 });                          // kicker onto the long ledge
+  // ---- west side: flat rail, ledge and a kinked rail ----
+  B.rail(V3(-72, yy + 0.5, -10), V3(-58, yy + 0.5, -10), { mat: 'railRed' });
+  B.box({ x: -48, z: -18, y: yy, w: 0.9, h: 0.5, d: 12, mat: 'concreteSmooth', ledge: true, tile: 3 });
+  B.rail(V3(-70, yy + 0.85, -24), V3(-63, yy + 0.85, -24), { mat: 'railBlack', postEvery: 2.5 });
+  B.rail(V3(-63, yy + 0.85, -24), V3(-56, yy + 0.4, -24), { mat: 'railBlack', postEvery: 2.5 });
+  // ---- north: a long ledge behind the spine ----
+  B.box({ x: 0, z: -60, y: yy, w: 16, h: 0.55, d: 0.9, mat: 'concreteSmooth', ledge: true, tile: 3 });
+  // ---- make it a park, not a car park ----
+  // painted zones and lanes
+  B.paint(27, -5, 40, 46, 0xff6a2a, 0.2, 0, yy);            // street plaza
+  B.paint(56, 6, 10, 118, 0x2f7fd6, 0.2, 0, yy);            // jump line lane
+  for (const sx of [-5, 5]) B.paint(56 + sx, 6, 0.18, 118, 0xffffff, 0.75, 0, yy);
+  B.paint(-35, -34, 26, 22, 0x2fb58a, 0.2, 0, yy);          // vert run-up
+  B.paint(35, -37, 16, 30, 0x2fb58a, 0.16, 0, yy);          // mini ramp
+  B.paint(-62, 56, 46, 6, 0xffd21f, 0.2, 0, yy);            // pump line
+  B.paint(0, -34, 12, 14, 0xc42b6b, 0.18, 0, yy);           // spine
+  for (let i = 0; i < 4; i++) B.paint(0, 30, 0.3, 4.6, 0xffffff, 0.35, (i * Math.PI) / 4, yy); // spawn mark
+  // perimeter kerbs: a low grindable ledge in sections, with gaps to ride out through
+  const kerb = (x, z, w, d) => B.box({ x, z, y: yy, w, h: 0.45, d, mat: 'concreteSmooth', ledge: true, tile: 3 });
+  for (const x of [-60, -32, 32, 60]) { kerb(x, -66.2, 18, 0.7); kerb(x, 66.2, 18, 0.7); }
+  for (const z of [-50, -25, 38, 55]) { kerb(-76.2, z, 0.7, 14); kerb(76.2, z, 0.7, 14); }
+  // more mural walls on the corners
+  B.graffitiWall(-64, -63.2, 0, 12, 2.8, 5);
+  B.graffitiWall(64, 63.2, 0, 12, 2.8, 6);
+  B.graffitiWall(-73.4, 52, Math.PI / 2, 10, 2.6, 7);
+  // bleachers by the vert ramp (every step is a ledge)
+  for (let i = 0; i < 3; i++) B.box({ x: -57 - i * 1.2, z: -50, y: yy, w: 1.2, h: 0.45 * (i + 1), d: 12, mat: 'concreteSmooth', ledge: true, tile: 3 });
+  // flags at the four ways in
+  for (const [fx, fz, c] of [[72, -6, 0xff5a1f], [72, 6, 0xffd21f], [-72, 4, 0x3fa7ff], [-72, 16, 0xff5a1f], [14, 63, 0xffd21f], [26, 63, 0xff5a1f], [-6, -63, 0x8be07a], [6, -63, 0xff5a1f]]) B.flag(fx, fz, c);
   // graffiti walls & decor
   B.graffitiWall(-20, 66, 0, 10, 2.4, 0);
   B.graffitiWall(52, 66, 0, 8, 2.4, 1);
@@ -607,6 +731,37 @@ function buildDocks(B, A) {
   B.ramp(profiles.landing(8, 0.6, 30), { x: -250, z: 35, y: yy, yaw: 0, width: 8, top: 'deck', side: 'wood', surface: 'wood' });
   A.roofTop = new THREE.Vector3(-250, yy + 8, 12);
   for (let i = 0; i < 40; i++) B.decal(r.pick(['stain', 'stain', 'tire', 'crack']), Z.x + (r() - 0.5) * 190, Z.z + (r() - 0.5) * 160, yy + 0.003, 2 + r() * 6, r() * 6.28);
+  // ---- street set near the entrance: barriers, rails and a pallet line ----
+  const V3 = (x, y, z) => new THREE.Vector3(x, y, z);
+  B.box({ x: -235, z: 58, y: yy, w: 9, h: 0.6, d: 0.7, mat: 'concreteSmooth', ledge: true, tile: 3 });   // (kept clear of the roof-gap run-out at x = -250)
+  B.box({ x: -260, z: 64, y: yy, w: 9, h: 0.6, d: 0.7, mat: 'concreteSmooth', ledge: true, tile: 3 });
+  B.rail(V3(-274, yy + 0.5, 56), V3(-263, yy + 0.5, 56), { mat: 'railYellow' });
+  B.rail(V3(-243, yy + 0.65, 69), V3(-232, yy + 0.65, 69), { mat: 'railRed' });
+  for (let i = 0; i < 3; i++) B.box({ x: -356 - i * 9, z: 58 + i * 1.6, y: yy, w: 6.5, h: 0.45, d: 1.2, mat: 'deck', surface: 'wood', ledge: true, tile: 2 });
+  // loading dock: platform with a bank up, a rail along the edge and a drop off the end
+  B.box({ x: -290, z: -20, y: yy, w: 18, h: 1.0, d: 8, mat: 'concreteSmooth', ledge: true, tile: 3 });
+  B.ramp(profiles.bank(1.0, 4.5, 0).pts.slice(0, -1), { x: -276.5, z: -20, y: yy, yaw: -Math.PI / 2, width: 6, top: 'concreteSmooth', side: 'concreteDark', surface: 'concrete', tile: 3 });
+  B.rail(V3(-298, yy + 1.5, -16.6), V3(-284, yy + 1.5, -16.6), { mat: 'railBlack', postEvery: 3.5 });
+  // second quay ledge and a down rail by the pier
+  B.box({ x: -405, z: 92, y: yy, w: 0.8, h: 0.5, d: 20, mat: 'concreteSmooth', ledge: true, tile: 3 });
+  B.rail(V3(-426, yy + 0.55, 66), V3(-416, yy + 0.55, 66), { mat: 'railBlack' });
+  // ---- dressing: a container alley, dock markings, bollards and puddles ----
+  for (let i = 0; i < 6; i++) {
+    B.container({ x: -306 + i * 14, z: -42, y: yy, color: colors[(i * 2 + 1) % 5] });
+    if (i % 2 === 0) B.container({ x: -306 + i * 14, z: -42, y: yy, color: colors[(i + 3) % 5], stackOn: 1 });
+  }
+  for (let i = 0; i < 9; i++) B.paint(-330 + i * 4, 30, 0.5, 10, 0xf2b705, 0.7, 0.6, yy);      // hatched keep-clear box
+  B.paint(-314, 48, 150, 0.3, 0xf2b705, 0.7, 0, yy); B.paint(-314, 52, 150, 0.3, 0xf2b705, 0.7, 0, yy); // lane lines
+  B.paint(-409, 30, 0.4, 100, 0xffffff, 0.7, 0, yy);                                           // quay edge line
+  for (let z2 = -8; z2 <= 124; z2 += 12) B.add(new THREE.CylinderGeometry(0.22, 0.26, 0.6, 12), 'craneYellow', B.matrix(-416.5, yy + 0.3, z2));
+  {
+    const rp = rng(77), puddle = new THREE.MeshStandardMaterial({ color: 0x1a2026, roughness: 0.04, metalness: 0.7, transparent: true, opacity: 0.75, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3 });
+    for (let i = 0; i < 12; i++) {
+      const m = new THREE.Mesh(new THREE.CircleGeometry(1.2 + rp() * 2.4, 20).rotateX(-Math.PI / 2), puddle);
+      m.position.set(Z.x + (rp() - 0.5) * 170, yy + 0.014, Z.z + (rp() - 0.5) * 140); m.scale.set(1, 1, 0.55 + rp() * 0.6); m.rotation.y = rp() * 3;
+      m.receiveShadow = true; B.scene.add(m);
+    }
+  }
   // quay rail and pipe
   B.rail(new THREE.Vector3(-412, yy + 0.5, -10), new THREE.Vector3(-412, yy + 0.5, 60), { mat: 'railBlack', postEvery: 4 });
   const pipeY = yy + 1.1;
@@ -802,6 +957,26 @@ export async function buildWorld(scene, renderer, quality, progress = () => {}) 
   buildPool(B, A);
   buildChannel(B, A);
   B.finalize();
+  world.lampSpots = B.lampSpots || [];
+  // waving flags
+  {
+    const geo = new THREE.PlaneGeometry(1.7, 1.0, 12, 4).translate(0.85, 0, 0);
+    const mats = {};
+    for (const f of B.flags || []) {
+      let mat = mats[f.color];
+      if (!mat) {
+        mat = mats[f.color] = new THREE.MeshStandardMaterial({ color: f.color, side: THREE.DoubleSide, roughness: 0.8 });
+        mat.onBeforeCompile = (sh) => {
+          sh.uniforms.uTime = windUniforms.uTime;
+          sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nuniform float uTime;')
+            .replace('#include <begin_vertex>', '#include <begin_vertex>\n float w = position.x / 1.7; transformed.z += sin(uTime * 5.0 + position.x * 4.0 + position.y * 2.0) * 0.16 * w; transformed.y += sin(uTime * 3.3 + position.x * 3.0) * 0.05 * w;');
+        };
+      }
+      const m = new THREE.Mesh(geo, mat);
+      m.position.set(f.x, f.y, f.z); m.rotation.y = f.yaw + 0.5; m.castShadow = quality.shadows > 0;
+      scene.add(m);
+    }
+  }
   progress('Growing trees', 0.7); await tick();
   scatterTrees(scene, terrain, world, quality);
   scatterRocks(scene, terrain, collision, quality);
