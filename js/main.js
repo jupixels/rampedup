@@ -6,7 +6,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
-import { buildWorld, Environment } from './world.js';
+import { buildWorld, Environment, lampGlows } from './world.js';
 import { setAnisotropy } from './textures.js';
 import { Player } from './player.js';
 import { Tricks } from './tricks.js';
@@ -39,7 +39,9 @@ const SanitizeShader = {
   fragmentShader: `uniform sampler2D tDiffuse; varying vec2 vUv;
     void main(){ vec4 c = texture2D(tDiffuse, vUv);
       if (isnan(c.r) || isnan(c.g) || isnan(c.b) || isinf(c.r) || isinf(c.g) || isinf(c.b)) c = vec4(0.5, 0.5, 0.5, 1.0);
-      gl_FragColor = vec4(clamp(c.rgb, 0.0, 60.0), 1.0); }`,
+      // 6.0 is already pure white after tone mapping; anything brighter (the sky around the sun)
+      // only fed the bloom and laid a milky veil over the whole frame
+      gl_FragColor = vec4(clamp(c.rgb, 0.0, 6.0), 1.0); }`,
 };
 
 const GradeShader = {
@@ -82,7 +84,7 @@ class Game {
   constructor() {
     this.settings = Object.assign({
       name: 'Rider' + Math.floor(Math.random() * 900 + 100),
-      colors: { frame: '#ff5a1f', helmet: '#f2f2f2', shirt: '#1d2b3a', pants: '#2a2a2a' },
+      colors: { frame: '#ff5a1f', helmet: '#f2f2f2', shirt: '#2f6fd6', pants: '#262a31' },
       quality: null, time: 'golden', fps: false, hints: true, cam: 'chase',
       camDist: 1, fov: 60, sens: 1, invert: false, reduceMotion: false, mph: false, minimap: true,
       classic: false, binds: null,
@@ -182,6 +184,19 @@ class Game {
     const audioP = this.audio.load().catch((e) => console.warn('audio', e));
 
     this.world = await buildWorld(this.scene, renderer, this.q, (t, p) => this.ui.loading(t, p));
+    lampGlows(this.scene, this.env, this.world.lampSpots);
+    this.env.setTime(this.settings.time);
+    // soft contact shadow under the rider: grounds the bike where the sun shadow is faint or out of range
+    {
+      const c = document.createElement('canvas'); c.width = c.height = 64;
+      const g2 = c.getContext('2d'), gr = g2.createRadialGradient(32, 32, 2, 32, 32, 32);
+      gr.addColorStop(0, 'rgba(0,0,0,0.55)'); gr.addColorStop(0.6, 'rgba(0,0,0,0.22)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+      g2.fillStyle = gr; g2.fillRect(0, 0, 64, 64);
+      this.blob = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4 }));
+      this.blob.renderOrder = 2;
+      this.blobG = { h: 0, n: new THREE.Vector3(0, 1, 0), surface: '', prop: false, water: false };
+      this.scene.add(this.blob);
+    }
     this.ui.loading('Tuning the bike', 0.88);
     await new Promise((r) => setTimeout(r, 0));
     const T0 = performance.now(), dbg = (l) => location.search.includes('debug') && console.log('[load]', l, Math.round(performance.now() - T0));
@@ -250,7 +265,7 @@ class Game {
     }
     // Guard against NaN/huge HDR pixels: bloom would smear a single bad pixel into a dark flash
     if (q.bloom) this.composer.addPass(new ShaderPass(SanitizeShader));
-    if (q.bloom) this.composer.addPass(new UnrealBloomPass(new THREE.Vector2(size.x / 2, size.y / 2), 0.1, 0.35, 1.8));
+    if (q.bloom) this.composer.addPass(new UnrealBloomPass(new THREE.Vector2(size.x / 2, size.y / 2), 0.1, 0.35, 3.2));
     this.composer.addPass(new OutputPass());
     this.grade = new ShaderPass(GradeShader);
     this.composer.addPass(this.grade);
@@ -552,6 +567,21 @@ class Game {
       this.camera.position.lerp(target, this.focusRider ? 0.08 : 1);
       this.camera.lookAt(focus);
       this.courses.update(dt);
+    }
+    // contact shadow follows the bike down to whatever is under it
+    if (this.blob) {
+      const bp = p.model.root.position, col = this.world.collision;
+      const gr = col.ground(bp.x, bp.z, bp.y + 0.4, this.blobG);
+      const up = Math.max(0, bp.y - gr.h);
+      this.blob.visible = p.mode !== 'bail' && p.mode !== 'wall' && up < 9 && !gr.water && p.model.root.visible;
+      if (this.blob.visible) {
+        this.blob.position.set(bp.x, gr.h + 0.02, bp.z);
+        this.blob.quaternion.setFromUnitVectors(THREE.Object3D.DEFAULT_UP, gr.n);
+        this.blob.rotateY(p.visHeading);
+        const k = 1 + up * 0.22;
+        this.blob.scale.set(1.0 * k, 1, 2.0 * k);
+        this.blob.material.opacity = 0.9 / (1 + up * 0.6);
+      }
     }
     this.net.update(dt);
     this.audio.update(p, this.paused || !this.playing);

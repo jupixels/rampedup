@@ -122,7 +122,7 @@ export function safeColors(c) {
   c = c && typeof c === 'object' ? c : {};
   const out = {
     frame: safeColor(c.frame, '#ff5a1f'), helmet: safeColor(c.helmet, '#f2f2f2'),
-    shirt: safeColor(c.shirt, '#1d2b3a'), pants: safeColor(c.pants, '#2a2a2a'),
+    shirt: safeColor(c.shirt, '#2f6fd6'), pants: safeColor(c.pants, '#262a31'),
   };
   for (const k of ['rims', 'tires', 'bars', 'pegs', 'seat', 'grips', 'shoes', 'gloves']) if (c[k] != null) out[k] = safeColor(c[k], undefined);
   for (const k of ['frame', 'helmet', 'rims', 'tires', 'bars', 'shirt', 'pants', 'pegs']) {

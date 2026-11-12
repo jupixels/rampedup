@@ -10,8 +10,8 @@ const $ = (s, el = document) => el.querySelector(s);
 const PALETTES = {
   frame: ['#ff5a1f', '#ffd21f', '#3fd4ff', '#57e08a', '#e8e8e8', '#151515', '#c42b6b', '#7b5cff', '#2b6cff', '#9aa1a8'],
   helmet: ['#f2f2f2', '#151515', '#ff5a1f', '#ffd21f', '#3fd4ff', '#c42b6b', '#57e08a', '#7b5cff'],
-  shirt: ['#1d2b3a', '#f2f2f2', '#151515', '#8a1e1e', '#ff5a1f', '#2f6b3a', '#ffd21f', '#3fd4ff', '#6b4a2f'],
-  pants: ['#2a2a2a', '#3b4a5e', '#5b4a3a', '#151515', '#7a7a7a', '#2f3d2a', '#c8b89a'],
+  shirt: ['#2f6fd6', '#1d2b3a', '#f2f2f2', '#151515', '#8a1e1e', '#ff5a1f', '#2f6b3a', '#ffd21f', '#3fd4ff', '#6b4a2f'],
+  pants: ['#262a31', '#2a2a2a', '#3b4a5e', '#5b4a3a', '#151515', '#7a7a7a', '#2f3d2a', '#c8b89a'],
 };
 const MEDAL = ['', 'Bronze', 'Silver', 'Gold'];
 const MEDAL_C = ['', '#c98a54', '#c9d1d9', '#ffd21f'];

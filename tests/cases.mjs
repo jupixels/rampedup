@@ -716,4 +716,42 @@ export const CASES = [
       return { ok: !missing.length && linked && m.display === 'fullscreen' && m.icons.length >= 3, detail: missing.length ? 'missing: ' + missing.join(', ') : `${m.icons.length} icons, display=${m.display}` };
     },
   },
+  // ---------------- phase 7: world and visuals ----------------
+  {
+    name: 'visuals: every time of day, including Night, renders without errors',
+    run: async () => {
+      const g = window.__game;
+      const { TIMES } = await import('./js/world.js');
+      const errs = [], keys = Object.keys(TIMES);
+      for (const k of keys) { try { g.env.setTime(k); g.composer.render(0.016); } catch (e) { errs.push(k + ': ' + e.message); } }
+      const nightGlow = (g.env.setTime('night'), g.env.glowMat && g.env.glowMat.opacity > 0.5);
+      const dayGlow = (g.env.setTime('midday'), g.env.glowMat.opacity === 0);
+      g.env.setTime(g.settings.time);
+      return { ok: !errs.length && keys.includes('night') && nightGlow && dayGlow, detail: errs.join('; ') || `${keys.join(', ')}; lamp pools on at night=${nightGlow}, off by day=${dayGlow}` };
+    },
+  },
+  {
+    name: 'visuals: course start beams fade out when the camera is inside them',
+    run: () => {
+      const g = window.__game, sim = window.__sim, C = g.courses;
+      sim.reset();
+      const m = C.markers[0];
+      g.camera.position.set(m.grp.position.x, m.grp.position.y + 1.5, m.grp.position.z);
+      C.update(1 / 60);
+      const inside = m.beam.material.uniforms.uFade.value;
+      g.camera.position.set(m.grp.position.x + 30, m.grp.position.y + 3, m.grp.position.z);
+      C.update(1 / 60);
+      const away = m.beam.material.uniforms.uFade.value;
+      return { ok: inside === 0 && away === 1, detail: `fade inside=${inside} at 30 m=${away}` };
+    },
+  },
+  {
+    name: 'visuals: Loam Woods is wooded, and the jump lines are still clear of trees',
+    run: () => {
+      const w = window.__game.world;
+      const inZone = w.treePoints.filter(([x, z]) => Math.abs(x - 300) < 45 && Math.abs(z + 40) < 120);
+      const onLine = inZone.filter(([x, z]) => [288, 313, 329].some((lx) => Math.abs(x - lx) < 6.5) || z > 66 || z < -122);
+      return { ok: inZone.length >= 40 && onLine.length === 0, detail: `${inZone.length} trees inside the spot, ${onLine.length} on a line` };
+    },
+  },
 ];

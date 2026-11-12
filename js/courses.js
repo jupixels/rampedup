@@ -161,9 +161,9 @@ export class Courses {
       ring.position.y = 0.06;
       const beam = new THREE.Mesh(beamGeo, new THREE.ShaderMaterial({
         transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
-        uniforms: { uColor: { value: color }, uTime: { value: 0 } },
+        uniforms: { uColor: { value: color }, uTime: { value: 0 }, uFade: { value: 1 } },
         vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
-        fragmentShader: 'varying vec2 vUv; uniform vec3 uColor; uniform float uTime; void main(){ float a = pow(1.0 - vUv.y, 2.2) * 0.55 * (0.8 + 0.2*sin(uTime*3.0 + vUv.y*20.0)); gl_FragColor = vec4(uColor * a, a); }',
+        fragmentShader: 'varying vec2 vUv; uniform vec3 uColor; uniform float uTime; uniform float uFade; void main(){ float a = pow(1.0 - vUv.y, 2.2) * 0.55 * (0.8 + 0.2*sin(uTime*3.0 + vUv.y*20.0)) * uFade; gl_FragColor = vec4(uColor * a, a); }',
       }));
       beam.position.y = 15;
       const best = this.best[c.id];
@@ -356,7 +356,13 @@ export class Courses {
     const g = this.game;
     const p = g.player;
     const t = performance.now() / 1000;
-    for (const m of this.markers) { m.beam.material.uniforms.uTime.value = t; m.grp.visible = !this.run; }
+    const cp = g.camera.position;
+    for (const m of this.markers) {
+      m.beam.material.uniforms.uTime.value = t; m.grp.visible = !this.run;
+      // standing in a beam used to tint the whole screen: fade it out as the camera gets close
+      const d = Math.hypot(cp.x - m.grp.position.x, cp.z - m.grp.position.z);
+      m.beam.material.uniforms.uFade.value = Math.min(1, Math.max(0, (d - 2.4) / 5));
+    }
     for (const { m } of this.sprocketMeshes) { m.rotation.y += dt * 1.6; m.position.y += Math.sin(t * 2 + m.position.x) * 0.002; }
     // sprocket pickups
     for (let i = this.sprocketMeshes.length - 1; i >= 0; i--) {
