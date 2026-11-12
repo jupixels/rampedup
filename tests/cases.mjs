@@ -170,4 +170,138 @@ export const CASES = [
       return { ok: !!saved && saved.best >= 500 && typeof saved.grindDist === 'number', detail: JSON.stringify(saved) };
     },
   },
+  // ---------------- phase 2: controls and feel ----------------
+  {
+    name: 'flips: pedalling through a hop does not start a flip',
+    run: () => {
+      const g = window.__game, sim = window.__sim;
+      sim.reset();
+      sim.step(180, { pedal: 1, flip: 1 });
+      sim.step(20, { pedal: 1, flip: 1, hop: true });
+      sim.step(1, { pedal: 1, flip: 1, hopReleased: true });
+      sim.step(120, { pedal: 1, flip: 1 });
+      return { ok: sim.has('ev:hop') && sim.has('ev:land') && !sim.has('ev:bail') && g.player.mode === 'ground', detail: sim.log.filter((l) => /bail|land|hop/.test(l)).join(',') };
+    },
+  },
+  {
+    name: 'flips: a fresh press in the air still flips; classic mode keeps the old behaviour',
+    run: () => {
+      const g = window.__game, p = g.player, sim = window.__sim;
+      const air = (classic, frames) => {
+        p.classic = classic;
+        sim.reset();
+        sim.step(60, { pedal: 1, flip: 1 });
+        sim.step(10, { pedal: 1, flip: 1, hop: true });
+        sim.step(1, { pedal: 1, flip: 1, hopReleased: true });
+        p.vel.y = 12; // plenty of hang time
+        let f = 0;
+        for (const fr of frames) { sim.step(fr[0], fr[1]); }
+        f = p.air ? p.air.flip : NaN;
+        return f;
+      };
+      const held = air(false, [[20, { flip: 1 }]]);                      // never released: ignored
+      const fresh = air(false, [[4, {}], [20, { flip: -1 }]]);           // released, then back flip
+      const classic = air(true, [[20, { flip: 1 }]]);                    // classic: held key flips
+      p.classic = false;
+      sim.reset();
+      return { ok: held === 0 && fresh < -0.5 && classic > 0.5, detail: `held=${held.toFixed(2)} fresh=${fresh.toFixed(2)} classic=${classic.toFixed(2)}` };
+    },
+  },
+  {
+    name: 'manual: starting one while pedalling gives a normal manual that holds',
+    run: () => {
+      const g = window.__game, p = g.player, sim = window.__sim;
+      sim.reset(-60, 30, Math.PI / 2);
+      sim.step(150, { pedal: 1, flip: 1 });
+      sim.step(1, { pedal: 1, flip: 1, manual: true, manualPressed: true });
+      const nose = p.manual && p.manual.nose;
+      let t = 0;
+      for (let i = 0; i < 120 && p.manual; i++) { sim.step(1, { pedal: 1, flip: 1, manual: true }); if (p.manual) t = p.manual.time; }
+      return { ok: nose === false && t > 1.9 && !sim.has('ev:manualFail'), detail: `nose=${nose} lasted ${t.toFixed(2)}s` };
+    },
+  },
+  {
+    name: 'manual: holding brake as you start gives a nose manual',
+    run: () => {
+      const g = window.__game, p = g.player, sim = window.__sim;
+      sim.reset(-60, 30, Math.PI / 2);
+      p.vel.set(8, 0, 0);
+      sim.step(1, { brake: 1, flip: -1, manual: true, manualPressed: true });
+      const started = !!p.manual, nose = started && p.manual.nose === true;
+      sim.step(5, {});
+      return { ok: nose, detail: `started=${started} nose=${nose}` };
+    },
+  },
+  {
+    name: 'fakie: landing backwards rolls fakie; tapping brake reverts',
+    run: () => {
+      const g = window.__game, p = g.player, sim = window.__sim;
+      sim.reset(-60, 30, Math.PI / 2);
+      sim.step(1, { hop: true }); sim.step(12, { hop: true }); sim.step(1, { hopReleased: true });
+      // in the air, travelling +x but facing -x
+      p.vel.x = 7; p.vel.z = 0; p.heading = -Math.PI / 2; p.air.spin = Math.PI;
+      sim.step(120, {});
+      const facingBack = Math.cos(p.heading - Math.atan2(p.vel.x, p.vel.z)) < -0.9;
+      const rolled = p.mode === 'ground' && p.fakie && facingBack && !sim.has('ev:revert') && !sim.has('ev:bail');
+      const detail1 = `mode=${p.mode} fakie=${p.fakie} facingBack=${facingBack} speed=${p.speed.toFixed(1)} log=${sim.log.filter((l) => /land|bail|revert/.test(l)).join(',')}`;
+      sim.step(1, { brake: 1, flip: -1 });
+      sim.step(10, { brake: 1, flip: -1 });
+      const facingFwd = Math.cos(p.heading - Math.atan2(p.vel.x, p.vel.z)) > 0.9;
+      const reverted = sim.has('ev:revert') && !p.fakie && facingFwd && p.speed > 3;
+      return { ok: rolled && reverted, detail: detail1 + ` | after tap: fakie=${p.fakie} fwd=${facingFwd} speed=${p.speed.toFixed(1)}` };
+    },
+  },
+  {
+    name: 'fakie: hop and spin 180 out of fakie is a Half Cab',
+    run: () => {
+      const g = window.__game, p = g.player, sim = window.__sim;
+      sim.reset(-60, 30, -Math.PI / 2);
+      p.vel.set(7, 0, 0); p.fakie = true; // rolling +x, facing -x
+      sim.step(2, {});
+      const wasFakie = p.fakie;
+      sim.step(16, { hop: true }); sim.step(1, { hopReleased: true });
+      for (let i = 0; i < 200 && p.mode === 'air'; i++) sim.step(1, { steer: Math.abs(p.air.spin) < 2.45 ? 1 : 0 });
+      sim.step(60, {});
+      return { ok: wasFakie && sim.log.some((l) => l.startsWith('land:Half Cab')) && !p.fakie && !sim.has('ev:bail'), detail: sim.log.filter((l) => /land|bail|bank/.test(l)).join(',') };
+    },
+  },
+  {
+    name: 'courses: reset returns to the last gate with the clock running; restart starts over',
+    run: () => {
+      const g = window.__game, p = g.player, sim = window.__sim;
+      sim.reset();
+      const c = g.courses.list.find((x) => x.id === 'yard');
+      g.courses.start(c, { countdownFrom: 0.05 });
+      sim.step(10, {});
+      const r = g.courses.run;
+      // roll through gate 1, carry on a while, then reset
+      const gate = c.gates[0];
+      p.spawn(gate.x, gate.z + 3, Math.PI);
+      for (let i = 0; i < 300 && r.idx < 1; i++) sim.step(1, { pedal: 1 });
+      sim.step(90, { pedal: 1, steer: 0.4 });
+      const tBefore = r.time;
+      g.resetRider();
+      const back = Math.hypot(p.pos.x - gate.x, p.pos.z - gate.z) < 1.5;
+      const same = g.courses.run === r && r.state === 'running' && r.idx === 1 && r.time >= tBefore;
+      g.restartCourse();
+      const fresh = g.courses.run && g.courses.run !== r && g.courses.run.state === 'countdown';
+      g.courses.cancel(true);
+      return { ok: r.idx >= 1 && back && same && fresh, detail: `passedGate=${r.idx >= 1} backAtGate=${back} sameRun=${same} restarted=${fresh}` };
+    },
+  },
+  {
+    name: 'controls: rebinding a key works, and prompts follow it',
+    run: () => {
+      const g = window.__game, inp = g.input;
+      const tap = (code) => { window.dispatchEvent(new KeyboardEvent('keydown', { code })); const s = inp.poll(); window.dispatchEvent(new KeyboardEvent('keyup', { code })); inp.poll(); return s; };
+      const before = tap('Space').hop;
+      inp.bindKey('hop', 'KeyQ');
+      const q = tap('KeyQ').hop, space = tap('Space').hop, label = inp.label('hop');
+      const saved = JSON.stringify(inp.bindsToSave());
+      inp.setBinds(null);
+      const restored = tap('Space').hop;
+      inp.padActive = false;
+      return { ok: before && q && !space && label === 'Q' && restored && saved.includes('KeyQ'), detail: `space=${before} Q=${q} spaceAfter=${space} label=${label} restored=${restored} saved=${saved}` };
+    },
+  },
 ];

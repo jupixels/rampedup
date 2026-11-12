@@ -2,7 +2,7 @@
 import { ZONES, FAST_TRAVEL, WORLD, LAKE } from './layout.js';
 import { CHALLENGES } from './courses.js';
 import { formatTime, clamp, store, safeColor } from './util.js';
-import { TRICK_LIST } from './input.js';
+import { TRICK_LIST, ACTION_LABELS, DEFAULT_KEYS, keyName, padName } from './input.js';
 import { UNLOCKS, BASE, xpForLevel } from './progress.js';
 
 const $ = (s, el = document) => el.querySelector(s);
@@ -92,6 +92,8 @@ export class UI {
       case 'openmap': this.openMap(); break;
       case 'closemap': this.closeMap(); break;
       case 'quitcourse': g.courses.cancel(); g.setPaused(false); break;
+      case 'restartcourse': g.setPaused(false); g.restartCourse(); break;
+      case 'resetbinds': g.input.setBinds(null); g.settings.binds = null; g.saveSettings(); this.renderBinds(); this._hintKey = null; break;
       case 'photo': g.setPaused(false); g.photo.enter(); break;
       case 'quitmenu': g.quitToMenu(); break;
       case 'resetprogress': {
@@ -290,12 +292,55 @@ export class UI {
     bind('minimap', () => s.minimap !== false, (v) => { s.minimap = v; }, 'change');
     bind('hints', () => s.hints !== false, (v) => { s.hints = v; }, 'change');
     bind('fps', () => s.fps, (v) => { s.fps = v; }, 'change');
+    bind('classic', () => s.classic, (v) => { s.classic = v; }, 'change');
+    this.renderBinds();
+  }
+
+  // Key and gamepad bindings: click one, then press the new key or button.
+  renderBinds() {
+    const box = this.panelEl && this.panelEl.querySelector('[data-bind=binds]');
+    if (!box) return;
+    const inp = this.game.input;
+    box.textContent = '';
+    const head = document.createElement('div');
+    head.className = 'bind-row head';
+    head.innerHTML = '<span></span><span>Keyboard</span><span>Gamepad</span>';
+    box.appendChild(head);
+    const save = () => { this.game.settings.binds = inp.bindsToSave(); this.game.saveSettings(); this._hintKey = null; this.renderBinds(); };
+    for (const [action, text] of Object.entries(ACTION_LABELS)) {
+      const row = document.createElement('div');
+      row.className = 'bind-row';
+      const name = document.createElement('span');
+      name.textContent = text;
+      const mk = (kind, label, can) => {
+        const b = document.createElement('button');
+        b.className = 'btn small bind';
+        b.textContent = label;
+        b.disabled = !can;
+        b.addEventListener('click', (e) => {
+          e.stopPropagation();
+          inp.cancelCapture();
+          b.textContent = kind === 'key' ? 'Press a key…' : 'Press a button…';
+          b.classList.add('wait');
+          inp.startCapture(kind, (v) => {
+            if (v != null) { if (kind === 'key') inp.bindKey(action, v); else inp.bindPad(action, v); save(); }
+            else this.renderBinds();
+          });
+        });
+        return b;
+      };
+      const keys = [...new Set((inp.keymap[action] || []).map(keyName))].join(' / ') || '—';
+      const padCan = !['left', 'right'].includes(action);
+      row.append(name, mk('key', keys, action in DEFAULT_KEYS), mk('pad', padCan ? padName(inp.padmap[action]) : 'Left stick', padCan));
+      box.appendChild(row);
+    }
   }
 
   applyPrefs() {
     const s = this.game.settings || {};
     this.el.fps.classList.toggle('hidden', !s.fps);
     this.el.hints.classList.toggle('hidden', s.hints === false || this.game.touch);
+    this._hintKey = null;
     this.el.minimap.classList.toggle('hidden', s.minimap === false);
     document.querySelector('.speed small').textContent = s.mph ? 'mph' : 'km/h';
   }
@@ -310,6 +355,8 @@ export class UI {
   showPause(on) {
     this.el.pause.classList.toggle('hidden', !on);
     $('#btn-quitcourse').classList.toggle('hidden', !this.game.courses.run);
+    $('#btn-restartcourse').classList.toggle('hidden', !(this.game.courses.run && !this.game.courses.run.opts.race));
+    if (!on) this.game.input.cancelCapture();
     if (!on) { this.closePanels(); this.game.focusRider = false; }
   }
 
@@ -495,7 +542,8 @@ export class UI {
       i.style.transform = `translateX(${(clamp(bal, -1, 1) * 130).toFixed(1)}px)`;
       const col = Math.abs(bal) > 0.7 ? '#ff3b3b' : Math.abs(bal) > 0.4 ? '#ffd21f' : '#57e08a';
       if (cache.get('balcol') !== col) { cache.set('balcol', col); i.style.background = col; }
-      set(el.balance.lastElementChild, p.grind ? 'Balance  A / D' : 'Balance  W / S');
+      const dev = g.input.device(), L = (a) => g.input.label(a);
+      set(el.balance.lastElementChild, dev === 'kb' ? (p.grind ? `Balance  ${L('left')} / ${L('right')}` : `Balance  ${L('pedal')} / ${L('brake')}`) : (p.grind ? 'Balance · stick left / right' : 'Balance · stick up / down'));
     }
     // course
     const r = g.courses.run;
@@ -517,6 +565,20 @@ export class UI {
           const rel = -(ang - cf);
           el.compass.firstElementChild.style.transform = `rotate(${rel}rad)`;
         }
+      }
+    }
+    // control hints follow the device in use and any rebinding
+    if (this.frame % 20 === 0) {
+      const L = (a) => g.input.label(a);
+      const hk = g.input.device() + (g.courses.run ? 'c' : '') + (p.fakie ? 'f' : '');
+      if (hk !== this._hintKey) {
+        this._hintKey = hk;
+        const items = [[L('pedal'), 'pedal'], [L('hop'), 'hop'], [['barspin', 'tailwhip', 'superman'].map(L).join(' '), 'tricks'], [L('manual'), 'manual']];
+        if (p.fakie) items.unshift([L('brake'), 'revert']);
+        if (g.courses.run) items.push([L('reset'), 'last gate']); else items.push([L('interact'), 'course']);
+        items.push([L('map'), 'map'], [L('pause'), 'menu']);
+        el.hints.textContent = '';
+        for (const [k, t] of items) { if (!k) continue; const sp = document.createElement('span'); const kb = document.createElement('kbd'); kb.textContent = k; sp.append(kb, ' ' + t); el.hints.appendChild(sp); }
       }
     }
     // prompt
@@ -586,7 +648,8 @@ export class UI {
   bailCaption(title, sub = '') {
     const el = document.getElementById('hud-bail');
     if (title) {
-      el.innerHTML = `<b>${esc(title)}</b><span>${esc(sub)}</span><small>Space or R to get back on</small>`;
+      const L = (a) => this.game.input.label(a);
+      el.innerHTML = `<b>${esc(title)}</b><span>${esc(sub)}</span><small>${esc(this.game.touch ? 'HOP or ↺ to get back on' : `${L('hop')} or ${L('reset')} to get back on`)}</small>`;
       el.classList.remove('show', 'sub'); void el.offsetWidth; el.classList.add('show');
     } else if (sub) {
       el.innerHTML = `<span>${esc(sub)}</span>`;
@@ -679,6 +742,7 @@ export class UI {
     root.classList.remove('hidden');
     const t = input.touch;
     t.active = true;
+    document.body.classList.add('touch');
     const stick = $('#stick'), knob = stick.firstElementChild;
     let sid = null, cx = 0, cy = 0;
     stick.addEventListener('pointerdown', (e) => { sid = e.pointerId; const r = stick.getBoundingClientRect(); cx = r.left + r.width / 2; cy = r.top + r.height / 2; stick.setPointerCapture(sid); move(e); });

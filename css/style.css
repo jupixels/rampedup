@@ -213,9 +213,22 @@ input:focus, select:focus { border-color: var(--accent); }
 #touch button.on { background: var(--accent); color: var(--ink); border-color: var(--accent); }
 .stick { position: absolute; left: 6vw; bottom: 8vh; width: 150px; height: 150px; border-radius: 50%; border: 2px solid rgba(244,241,234,0.4); background: rgba(14,15,17,0.3); pointer-events: auto; touch-action: none; }
 .stick i { position: absolute; left: 50%; top: 50%; width: 64px; height: 64px; margin: -32px 0 0 -32px; border-radius: 50%; background: rgba(244,241,234,0.85); }
-.tbtns { position: absolute; right: 4vw; bottom: 6vh; display: grid; grid-template-columns: repeat(3, 66px); grid-template-rows: repeat(2, 66px); gap: 10px; }
-.tbtns button { width: 66px; height: 66px; }
-.tbtns .t-hop { grid-column: 3; grid-row: 1 / span 2; height: 142px; border-radius: 40px; background: rgba(255,90,31,0.6); }
+.tbtns { position: absolute; right: max(3vw, env(safe-area-inset-right, 0px)); bottom: 6vh; display: grid; grid-template-columns: repeat(5, 58px); grid-template-rows: repeat(2, 58px); gap: 8px; }
+.tbtns button { width: 58px; height: 58px; font-size: 12px; line-height: 1.05; padding: 0; }
+.tbtns .t-hop { grid-column: 5; grid-row: 1 / span 2; height: 124px; border-radius: 36px; background: rgba(255,90,31,0.6); font-size: 15px; }
+.tbtns .t-man { background: rgba(63,212,255,0.35); }
+/* phones in portrait: ask for landscape instead of showing a cramped game */
+#rotate { display: none; position: fixed; inset: 0; z-index: 60; background: var(--ink); color: var(--paper); flex-direction: column; align-items: center; justify-content: center; gap: 8px; text-align: center; padding: 24px; }
+#rotate b { font: 400 34px/1 Anton, sans-serif; text-transform: uppercase; }
+#rotate span { opacity: 0.7; }
+@media (orientation: portrait) and (max-width: 700px) { body.touch #rotate { display: flex; } }
+/* key bindings */
+.bind-list { display: grid; gap: 4px; margin: 6px 0 10px; }
+.bind-row { display: grid; grid-template-columns: 1fr 120px 110px; gap: 6px; align-items: center; font-size: 15px; }
+.bind-row.head { opacity: 0.6; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; }
+.bind-row .bind { min-width: 0; padding: 4px 6px; font-size: 13px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bind-row .bind.wait { background: var(--accent); color: var(--ink); }
+.bind-row .bind:disabled { opacity: 0.35; }
 .ttop { position: absolute; top: 12px; right: 12px; display: flex; gap: 8px; }
 .ttop button { width: 48px; height: 48px; font-size: 13px; }
 

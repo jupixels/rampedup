@@ -70,6 +70,9 @@ export class Player {
     this.frozen = false;
     this.events = []; // for audio/fx
     this.netAnim = { type: 0, t: 0 };
+    this.classic = false;  // classic controls: flips and manuals react to keys already held
+    this.fakie = false;    // rolling backwards on purpose (landed fakie)
+    this.brakeLock = false;
   }
 
   spawn(x, z, heading, onTop = false) {
@@ -80,6 +83,7 @@ export class Player {
     this.mode = 'ground';
     this.normal.copy(g.n); this.visNormal.copy(g.n);
     this.air = this.grind = this.manual = this.bail = this.anim = null;
+    this.fakie = false; this.brakeLock = false;
     this.animQueue.length = 0;
     this.model.rider.position.set(0, 0, 0); this.model.rider.rotation.set(0, 0, 0);
     this.model.bike.position.set(0, 0, 0); this.model.bike.rotation.set(0, 0, 0);
@@ -122,9 +126,11 @@ export class Player {
     }
     // safe point
     this.safeTimer += dt;
-    if (this.mode === 'ground' && !this.manual && this.safeTimer > 0.6 && this.normal.y > 0.9 && this.speed > 0.3) {
+    const run = this.game.courses && this.game.courses.run;
+    const gateRun = run && run.course.type === 'gates';
+    if (!gateRun && this.mode === 'ground' && !this.manual && this.safeTimer > 0.6 && this.normal.y > 0.9 && this.speed > 0.3) {
       this.safeTimer = 0;
-      this.lastSafe.pos.copy(this.pos); this.lastSafe.heading = this.heading;
+      this.lastSafe.pos.copy(this.pos); this.lastSafe.heading = this.fakie ? wrapAngle(this.heading + Math.PI) : this.heading;
     }
     this.updateVisual(dt, input);
   }
@@ -141,17 +147,25 @@ export class Player {
     const surf = this.ground.surface;
     const roll = { concrete: 0.12, wood: 0.12, metal: 0.12, asphalt: 0.16, dirt: 0.32, rock: 0.3, sand: 1.4, grass: 0.55 }[surf] ?? 0.3;
     // propulsion / braking
-    const pedal = input.pedal * (this.manual ? 0.4 : 1);
+    // in a manual the pedal/brake keys are the balance; they don't drive the bike (classic: weak pedalling)
+    const pedal = input.pedal * (this.manual ? (this.classic ? 0.4 : 0) : 1);
+    if (this.brakeLock && input.brake < 0.3) this.brakeLock = false;
+    const brake = (this.manual && !this.classic) || this.brakeLock ? 0 : input.brake;
+    const brakeHit = input.brake > 0.5 && !this.prevBrake;
+    this.prevBrake = input.brake > 0.5;
     if (pedal > 0 && vf < PEDAL_MAX) {
       const a = (vf < 3 ? 6.5 : 5.4) * (1 - Math.max(0, vf) / PEDAL_MAX);
       vf += pedal * a * dt;
       this.pedaling = true;
     } else this.pedaling = false;
-    if (input.brake > 0) {
-      const b = 8 * input.brake * dt;
+    // riding fakie: tapping brake snaps the bike around (a revert) instead of braking
+    const wantRevert = this.fakie && brakeHit && vf < -2 && !this.manual;
+    if (wantRevert) this.brakeLock = true;
+    if (brake > 0 && !this.fakie) {
+      const b = 8 * brake * dt;
       vf = Math.abs(vf) < b ? 0 : vf - Math.sign(vf) * b;
     }
-    this.skidding = (input.brake > 0.5 && Math.abs(vf) > 2.5) || Math.abs(vl) > 1.6;
+    this.skidding = (brake > 0.5 && Math.abs(vf) > 2.5) || Math.abs(vl) > 1.6;
     // gravity along the surface
     const gf = -G * f.y, gl = -G * lat.y;
     vf += gf * dt; vl += gl * dt;
@@ -165,13 +179,18 @@ export class Player {
     const yawRate = input.steer * maxYaw * (this.manual ? 0.6 : 1) * (vf < -0.2 ? -1 : 1);
     this.heading += yawRate * dt;
     this.yawRate = yawRate;
-    // revert when rolling backwards
-    if (vf < -1.2 && !this.manual) {
+    // Rolling backwards. After a fakie landing you stay fakie until you revert (tap brake),
+    // half-cab out, or slow to a stop. A roll-back that starts any other way (stalling on a
+    // ramp) just turns the bike around.
+    if (this.fakie && vf > -0.6) this.fakie = false;
+    if (!this.manual && (wantRevert || (vf < -1.2 && !this.fakie))) {
+      const chosen = wantRevert;
+      this.fakie = false;
       this.heading = wrapAngle(this.heading + Math.PI);
       vf = -vf;
       this.emit('revert');
       // a revert links a combo that is already running; on its own it is worth nothing
-      if (this.game.tricks.combo) this.game.tricks.addTrick('Revert', 120, false);
+      if (this.game.tricks.combo) this.game.tricks.addTrick('Revert', 120, chosen);
       const f2 = this.forward(tmpV);
       f.copy(f2.addScaledVector(n, -f2.dot(n)).normalize());
       lat.crossVectors(n, f).normalize();
@@ -244,7 +263,9 @@ export class Player {
       t: 0, startY: this.pos.y, maxY: this.pos.y, spin: 0, flip: 0, flipVel: 0, spinVel: 0,
       vert, hopped, tricks: [], launchNormal: this.normal.clone(), trajPitch: 0,
       targetHeading: null, popWindow: hopped ? 0 : 0.2, fromGrind: false,
+      flipArmed: this.classic, fakieStart: this.fakie,
     };
+    this.fakie = false;
     if (vert) {
       // keep the rider over the ramp: push horizontal velocity back toward the transition
       const nh = tmpV.set(this.normal.x, 0, this.normal.z);
@@ -358,7 +379,10 @@ export class Player {
     this.heading += A.spinVel * dt;
     A.spin += A.spinVel * dt;
     // flips: W = front flip (+), S = back flip (-)
-    const flipIn = input.flip;
+    // Flips need a fresh press: whatever was held at take-off (usually the pedal key) is
+    // ignored until it has been let go once.
+    let flipIn = input.flip;
+    if (!A.flipArmed) { if (Math.abs(flipIn) < 0.3) A.flipArmed = true; flipIn = 0; }
     if (flipIn) A.flipVel = damp(A.flipVel, flipIn * 6.6, 5, dt);
     else {
       // settle towards the nearest upright orientation
@@ -416,17 +440,21 @@ export class Player {
     const loss = perfect ? 1.06 : clamp(1 - Math.max(0, vn - 5) * 0.035, 0.6, 1);
     this.vel.copy(vt).multiplyScalar(loss);
     if (perfect) { this.game.tricks.addTrick('Perfect Landing', 150, false); this.emit('perfect'); }
-    if (fakie) {
-      this.heading = wrapAngle(this.heading + Math.PI);
+    if (this.classic) {
+      if (fakie) this.heading = wrapAngle(this.heading + Math.PI);
+      if (tsp > 1.6) this.heading = Math.atan2(vt.x, vt.z);
+    } else {
+      // landed backwards: keep facing backwards and roll fakie
+      if (tsp > 1.6) this.heading = wrapAngle(Math.atan2(vt.x, vt.z) + (fakie ? Math.PI : 0));
+      this.fakie = fakie && tsp > 1.6;
     }
-    if (tsp > 1.6) this.heading = Math.atan2(vt.x, vt.z);
     this.normal.copy(n);
     const tmpg = this.ground; this.ground = g; this.g2 = tmpg;
     this.mode = 'ground';
     this.landSquash = clamp(vn / 9, 0.15, 1);
     const flips = Math.round(A.flip / TAU);
     if (this.anim) A.tricks.push({ type: this.anim.type, hold: this.anim.holdTime }); // finished on touchdown
-    this.game.tricks.land(A, { flips, fakie, airtime: A.t, height: A.maxY - Math.min(A.startY, this.pos.y), vn });
+    this.game.tricks.land(A, { flips, fakie, fakieStart: A.fakieStart, airtime: A.t, height: A.maxY - Math.min(A.startY, this.pos.y), vn });
     this.emit('land', { vn, big: A.t > 0.9, airtime: A.t, pos: this.pos.clone(), surface: g.surface });
     this.anim = null; this.animQueue.length = 0;
     this.air = null;
@@ -521,7 +549,9 @@ export class Player {
   updateManual(dt, input) {
     const want = input.manual && this.speed > 1.2;
     if (!this.manual && want && (this.wantManualOnLand || input.manualPressed)) {
-      this.manual = { bal: 0.05 * (Math.random() - 0.5), balVel: 0, time: 0, nose: input.flip > 0.5 };
+      // nose manual: hold brake/back as you start it (classic: hold pedal/forward)
+      const nose = this.classic ? input.flip > 0.5 : input.flip < -0.5;
+      this.manual = { bal: 0.05 * (Math.random() - 0.5), balVel: 0, time: 0, nose, armed: this.classic || Math.abs(input.flip) < 0.3 };
       this.game.tricks.manualStart(this.manual.nose ? 'Nose Manual' : 'Manual');
       this.emit('manualStart');
     }
@@ -531,7 +561,10 @@ export class Player {
     if (!input.manual) { this.endManual(true); return; }
     m.time += dt;
     m.balVel += ((Math.random() - 0.5) * 2.0 + m.bal * (1.15 + m.time * 0.15)) * dt;
-    m.balVel += (m.nose ? 1 : -1) * input.flip * 3.8 * dt;
+    // balance input needs a fresh press too, so a held pedal key can't tip you over
+    let lean = input.flip;
+    if (!m.armed) { if (Math.abs(lean) < 0.3) m.armed = true; lean = 0; }
+    m.balVel += (m.nose ? 1 : -1) * lean * 3.8 * dt;
     m.balVel *= Math.exp(-0.5 * dt);
     m.bal += m.balVel * dt;
     this.game.tricks.manualTick(dt);
@@ -550,6 +583,7 @@ export class Player {
     if (this.mode === 'bail') return;
     this.mode = 'bail';
     this.grind = null; this.manual = null; this.air = null; this.anim = null; this.animQueue.length = 0;
+    this.fakie = false;
     const sp = this.vel.length();
     const splash = reason === 'splash' || reason === 'water';
     this.ragdoll = this.ragdoll || new Ragdoll(this.col);
@@ -636,7 +670,7 @@ export class Player {
     m.bike.position.copy(wo); m.bike.quaternion.copy(wq);
     m.rider.position.copy(wo); m.rider.quaternion.copy(wq);
     // wheel & cranks
-    const ws = this.mode === 'grind' ? 0 : this.vel.length();
+    const ws = this.mode === 'grind' ? 0 : this.vel.length() * (this.fakie ? -1 : 1);
     this.wheel += (ws / BIKE.WR) * dt;
     if (this.pedaling && this.mode === 'ground') this.crank += (ws / BIKE.WR) * dt * 0.42;
     else this.crank = damp(this.crank, Math.round(this.crank / Math.PI) * Math.PI, 3, dt); // level pedals when coasting
