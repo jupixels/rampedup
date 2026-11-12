@@ -85,8 +85,18 @@
       <h2>Courses</h2>
       <p class="muted">Ride to a glowing start marker and press <kbd>E</kbd>, or jump straight in here. Beat your ghost.</p>
       <div class="course-list" data-bind="courselist"></div>
+      <h3>Today's challenges</h3>
+      <p class="muted small">Three new ones every day, the same for every rider.</p>
+      <div class="challenge-list" data-bind="dailylist"></div>
+      <h3>Spot goals <span class="muted" data-bind="goalcount"></span></h3>
+      <p class="muted small">Each spot has five goals. Ride there and the next one shows under the spot name.</p>
+      <div class="challenge-list" data-bind="goallist"></div>
+      <h3>Gaps <span class="muted" data-bind="gapcount"></span></h3>
+      <div class="challenge-list" data-bind="gaplist"></div>
       <h3>Challenges <span class="muted" data-bind="chcount"></span></h3>
       <div class="challenge-list" data-bind="challist"></div>
+      <h3>Lifetime stats</h3>
+      <div class="stat-list" data-bind="statlist"></div>
     </div>
   </template>
 
@@ -101,6 +111,11 @@
       <div class="swatch-group" data-part="rims"><span>Rims</span><div class="swatches"></div></div>
       <div class="swatch-group" data-part="tires"><span>Tyres</span><div class="swatches"></div></div>
       <div class="swatch-group" data-part="bars"><span>Bars</span><div class="swatches"></div></div>
+      <div class="swatch-group" data-part="pegs"><span>Pegs</span><div class="swatches"></div></div>
+      <div class="swatch-group" data-part="seat"><span>Seat</span><div class="swatches"></div></div>
+      <div class="swatch-group" data-part="grips"><span>Grips</span><div class="swatches"></div></div>
+      <div class="swatch-group" data-part="shoes"><span>Shoes</span><div class="swatches"></div></div>
+      <div class="swatch-group" data-part="gloves"><span>Gloves</span><div class="swatches"></div></div>
       <p class="muted small" data-bind="unlockhint"></p>
     </div>
   </template>
@@ -250,6 +265,7 @@
   <section id="hud" class="hidden">
     <div class="hud-tl">
       <div class="zone" id="hud-zone">The Yard</div>
+      <div class="goal" id="hud-goal"></div>
       <div class="speed"><b id="hud-speed">0</b><small>km/h</small></div>
       <div class="score">Score <b id="hud-score">0</b></div>
       <div class="level"><span id="hud-level">Lv 1</span><i><b id="hud-xp"></b></i></div>

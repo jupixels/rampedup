@@ -283,3 +283,11 @@ input:focus, select:focus { border-color: var(--accent); }
 .swatches { row-gap: 16px; }
 .menu-list button:focus-visible, .btn:focus-visible, .swatches button:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
 .menu-foot .lvl { color: var(--cyan); margin-right: 14px; }
+
+/* spot goals, gaps and stats */
+#hud-goal { font-size: 14px; font-weight: 600; letter-spacing: 0.02em; color: var(--paper); opacity: 0.85; max-width: 320px; text-shadow: 0 1px 3px rgba(0,0,0,0.7); min-height: 0; }
+#hud-goal:empty { display: none; }
+.goal-zone { margin: 12px 0 2px; padding-left: 8px; border-left: 4px solid var(--accent); font-size: 15px; letter-spacing: 0.08em; text-transform: uppercase; }
+.stat-list { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 18px; font-size: 16px; }
+.stat-list div { display: flex; justify-content: space-between; border-bottom: 1px solid var(--line); padding: 3px 0; }
+.stat-list span { color: var(--muted); }

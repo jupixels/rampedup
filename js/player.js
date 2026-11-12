@@ -235,7 +235,11 @@ export class Player {
     const g = this.col.ground(nx, nz, ny + tol, this.g2);
     const d = (ny - g.h) * g.n.y;
     const sharp = g.n.dot(this.normal) < 0.7;
-    if (d > 0.05 || (sharp && this.vel.dot(g.n) > 0.3 * this.vel.length() && this.vel.length() > 1)) {
+    // Leave the ground when the surface drops away, or when it bends away from the direction of
+    // travel by more than ~8 degrees at speed: the lip of a kicker or a table-top box launches you
+    // instead of gluing the wheels to the table.
+    const spd = this.vel.length(), away = this.vel.dot(g.n);
+    if (d > 0.05 || (spd > 3.5 && away > 0.14 * spd) || (sharp && away > 0.3 * spd && spd > 1)) {
       // left the surface
       this.pos.set(nx, ny, nz);
       this.goAir(false);

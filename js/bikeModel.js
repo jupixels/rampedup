@@ -344,6 +344,12 @@ export class RiderBike {
       const shiny = ['#d8d8dc', '#e8e8ea'].includes(C.bars);
       M.bar.metalness = shiny ? 1 : 0.35; M.bar.roughness = shiny ? 0.15 : 0.35;
     }
+    // level 16+ parts
+    if (C.pegs) { M.peg.color.set(C.pegs); M.peg.metalness = C.pegsFinish === 'matte' ? 0.3 : 1; M.peg.roughness = C.pegsFinish === 'matte' ? 0.6 : 0.25; }
+    if (C.seat) M.seat.color.set(C.seat);
+    if (C.grips) M.grip.color.set(C.grips);
+    if (C.shoes) M.shoe.color.set(C.shoes);
+    if (C.gloves) M.glove.color.set(C.gloves);
   }
 
   // Free this model's GPU resources (remote riders and ghosts come and go).

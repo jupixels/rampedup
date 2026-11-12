@@ -533,6 +533,23 @@ function buildYard(B, A) {
   B.ramp(profiles.rollers(40, 0.55, 5), { x: -62, z: 56, y: yy, yaw: Math.PI / 2, width: 3.6, top: 'concreteSmooth', side: 'concreteDark', surface: 'concrete', tile: 3 });
   // bank wall south-east
   B.ramp(profiles.bank(1.6, 2.6, 2), { ...sk, x: 30, z: 60, yaw: 0, width: 14 });
+  // ---- street plaza (east of the funbox) ----
+  const V3 = (x, y, z) => new THREE.Vector3(x, y, z);
+  B.box({ x: 30, z: -4, y: yy, w: 0.9, h: 0.5, d: 16, mat: 'concreteSmooth', ledge: true, tile: 3 });          // long ledge
+  B.box({ x: 38, z: 10, y: yy, w: 0.8, h: 0.75, d: 8, mat: 'concreteSmooth', ledge: true, tile: 3 });           // tall ledge
+  B.box({ x: 41, z: -20, y: yy, w: 6, h: 0.3, d: 10, mat: 'concreteSmooth', ledge: true, tile: 3 });            // big manual pad
+  B.rail(V3(14, yy + 0.45, -18), V3(26, yy + 0.45, -18), { mat: 'railBlack' });                                 // flat bar
+  B.rail(V3(18, yy + 0.75, 12), V3(30, yy + 0.75, 12), { mat: 'railRed' });                                     // high rail
+  B.rail(V3(12, yy + 0.4, 5), V3(17.5, yy + 0.95, 5), { mat: 'railYellow', postEvery: 2 });                     // A-frame: up…
+  B.rail(V3(17.5, yy + 0.95, 5), V3(23, yy + 0.4, 5), { mat: 'railYellow', postEvery: 2 });                     // …and down
+  B.ramp(profiles.kicker(0.55, 24), { ...sk, x: 30, z: 9, yaw: Math.PI, width: 2.4 });                          // kicker onto the long ledge
+  // ---- west side: flat rail, ledge and a kinked rail ----
+  B.rail(V3(-72, yy + 0.5, -10), V3(-58, yy + 0.5, -10), { mat: 'railRed' });
+  B.box({ x: -48, z: -18, y: yy, w: 0.9, h: 0.5, d: 12, mat: 'concreteSmooth', ledge: true, tile: 3 });
+  B.rail(V3(-70, yy + 0.85, -24), V3(-63, yy + 0.85, -24), { mat: 'railBlack', postEvery: 2.5 });
+  B.rail(V3(-63, yy + 0.85, -24), V3(-56, yy + 0.4, -24), { mat: 'railBlack', postEvery: 2.5 });
+  // ---- north: a long ledge behind the spine ----
+  B.box({ x: 0, z: -60, y: yy, w: 16, h: 0.55, d: 0.9, mat: 'concreteSmooth', ledge: true, tile: 3 });
   // graffiti walls & decor
   B.graffitiWall(-20, 66, 0, 10, 2.4, 0);
   B.graffitiWall(52, 66, 0, 8, 2.4, 1);
@@ -607,6 +624,20 @@ function buildDocks(B, A) {
   B.ramp(profiles.landing(8, 0.6, 30), { x: -250, z: 35, y: yy, yaw: 0, width: 8, top: 'deck', side: 'wood', surface: 'wood' });
   A.roofTop = new THREE.Vector3(-250, yy + 8, 12);
   for (let i = 0; i < 40; i++) B.decal(r.pick(['stain', 'stain', 'tire', 'crack']), Z.x + (r() - 0.5) * 190, Z.z + (r() - 0.5) * 160, yy + 0.003, 2 + r() * 6, r() * 6.28);
+  // ---- street set near the entrance: barriers, rails and a pallet line ----
+  const V3 = (x, y, z) => new THREE.Vector3(x, y, z);
+  B.box({ x: -235, z: 58, y: yy, w: 9, h: 0.6, d: 0.7, mat: 'concreteSmooth', ledge: true, tile: 3 });   // (kept clear of the roof-gap run-out at x = -250)
+  B.box({ x: -260, z: 64, y: yy, w: 9, h: 0.6, d: 0.7, mat: 'concreteSmooth', ledge: true, tile: 3 });
+  B.rail(V3(-274, yy + 0.5, 56), V3(-263, yy + 0.5, 56), { mat: 'railYellow' });
+  B.rail(V3(-243, yy + 0.65, 69), V3(-232, yy + 0.65, 69), { mat: 'railRed' });
+  for (let i = 0; i < 3; i++) B.box({ x: -356 - i * 9, z: 58 + i * 1.6, y: yy, w: 6.5, h: 0.45, d: 1.2, mat: 'deck', surface: 'wood', ledge: true, tile: 2 });
+  // loading dock: platform with a bank up, a rail along the edge and a drop off the end
+  B.box({ x: -290, z: -20, y: yy, w: 18, h: 1.0, d: 8, mat: 'concreteSmooth', ledge: true, tile: 3 });
+  B.ramp(profiles.bank(1.0, 4.5, 0).pts.slice(0, -1), { x: -276.5, z: -20, y: yy, yaw: -Math.PI / 2, width: 6, top: 'concreteSmooth', side: 'concreteDark', surface: 'concrete', tile: 3 });
+  B.rail(V3(-298, yy + 1.5, -16.6), V3(-284, yy + 1.5, -16.6), { mat: 'railBlack', postEvery: 3.5 });
+  // second quay ledge and a down rail by the pier
+  B.box({ x: -405, z: 92, y: yy, w: 0.8, h: 0.5, d: 20, mat: 'concreteSmooth', ledge: true, tile: 3 });
+  B.rail(V3(-426, yy + 0.55, 66), V3(-416, yy + 0.55, 66), { mat: 'railBlack' });
   // quay rail and pipe
   B.rail(new THREE.Vector3(-412, yy + 0.5, -10), new THREE.Vector3(-412, yy + 0.5, 60), { mat: 'railBlack', postEvery: 4 });
   const pipeY = yy + 1.1;

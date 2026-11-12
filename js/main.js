@@ -20,6 +20,7 @@ import { Tutorial } from './tutorial.js';
 import { FX } from './fx.js';
 import { Progress } from './progress.js';
 import { PhotoMode } from './photo.js';
+import { Goals } from './goals.js';
 import { ZONES, SPAWN } from './layout.js';
 import { store, clamp } from './util.js';
 
@@ -171,6 +172,7 @@ class Game {
     this.fx.setScale(window.innerHeight * Math.min(window.devicePixelRatio || 1, this.q.pr));
     this.progress = new Progress(this);
     this.photo = new PhotoMode(this);
+    this.goals = new Goals(this);
     this.applySettings();
     // music starts with the first click or key press (browsers block audio before that)
     const startMusic = () => { if (this.audio.musicVol > 0) this.audio.music.start(); window.removeEventListener('pointerdown', startMusic); window.removeEventListener('keydown', startMusic); };
@@ -334,6 +336,7 @@ class Game {
     }
     if (e.type === 'comboLost') this.ui.bankPop('Combo lost', true);
     this.courses.checkChallenges(e);
+    this.goals?.onEvent(e);
   }
 
   handlePlayerEvents() {
@@ -374,6 +377,7 @@ class Game {
           const lines = BAIL_LINES[ev.reason] || BAIL_LINES.default;
           this.ui.bailCaption(lines[Math.floor(Math.random() * lines.length)], `Bail #${this.bails}`);
           this.courses.checkChallenges({ type: 'bail', reason: ev.reason });
+          this.goals.onEvent({ type: 'bail', reason: ev.reason });
           break;
         }
         case 'thud':
@@ -453,6 +457,7 @@ class Game {
         p.update(dt * slow, input);
         this.tricks.update(dt, p);
         this.handlePlayerEvents();
+        this.goals.update(dt);
         this.courses.update(dt);
         this.fx.update(dt, p);
       }

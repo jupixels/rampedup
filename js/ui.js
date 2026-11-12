@@ -1,6 +1,7 @@
 // DOM UI: menus, panels, HUD, minimap, big map, chat, touch controls.
 import { ZONES, FAST_TRAVEL, WORLD, LAKE } from './layout.js';
 import { CHALLENGES } from './courses.js';
+import { GOALS } from './goals.js';
 import { formatTime, clamp, store, safeColor } from './util.js';
 import { TRICK_LIST, ACTION_LABELS, DEFAULT_KEYS, keyName, padName } from './input.js';
 import { UNLOCKS, BASE, xpForLevel } from './progress.js';
@@ -98,7 +99,7 @@ export class UI {
       case 'quitmenu': g.quitToMenu(); break;
       case 'resetprogress': {
         if (b.dataset.armed) {
-          ['xp', 'best', 'medals', 'challenges', 'sprockets', 'tutorialDone', 'stats'].forEach((k) => { try { localStorage.removeItem('rampedup.' + k); } catch (e) {} });
+          ['xp', 'best', 'medals', 'challenges', 'sprockets', 'sprocketsSeen', 'tutorialDone', 'stats', 'goals', 'gaps', 'daily', 'parts'].forEach((k) => { try { localStorage.removeItem('rampedup.' + k); } catch (e) {} });
           Object.keys(localStorage).filter((k) => k.startsWith('rampedup.ghost.')).forEach((k) => localStorage.removeItem(k));
           location.reload();
         } else { b.dataset.armed = '1'; b.innerHTML = '<span>Click again to erase everything</span>'; }
@@ -214,6 +215,57 @@ export class UI {
       ch.appendChild(el);
     }
     p.querySelector('[data-bind=chcount]').textContent = `${done}/${CHALLENGES.length} · Sprockets ${C.found.size}/${C.sprockets.length}`;
+    this.renderGoals(p);
+  }
+
+  // daily challenge, spot goals, gaps and lifetime stats
+  renderGoals(p) {
+    const G = this.game.goals, st = this.game.tricks.stats;
+    const row = (done, name, desc, right = '') => {
+      const el = document.createElement('div');
+      el.className = 'challenge' + (done ? ' done' : '');
+      const i = document.createElement('i'), a = document.createElement('span'), b = document.createElement('small');
+      a.textContent = name; b.textContent = desc + (right ? ' · ' + right : '');
+      el.append(i, a, b);
+      return el;
+    };
+    const daily = p.querySelector('[data-bind=dailylist]');
+    G.dailyList.forEach((d, i) => {
+      const v = G.daily.prog[d.stat] || 0;
+      daily.appendChild(row(G.daily.done.includes(i), d.name, `${Math.min(d.n, Math.floor(v)).toLocaleString()} / ${d.n.toLocaleString()}`));
+    });
+    const goals = p.querySelector('[data-bind=goallist]');
+    for (const [k, z] of Object.entries(ZONES)) {
+      const h = document.createElement('h4');
+      h.className = 'goal-zone';
+      h.style.borderColor = z.color;
+      h.textContent = `${z.name}  ${G.count(k)}/5`;
+      goals.appendChild(h);
+      const next = G.next(k);
+      for (const goal of GOALS.filter((x) => x.zone === k)) {
+        const done = G.done.has(goal.id);
+        // goals past the next one stay a mystery until you get there
+        if (!done && goal !== next) { goals.appendChild(row(false, `Goal ${goal.tier}`, 'Finish the one before to reveal')); continue; }
+        goals.appendChild(row(done, goal.name, goal.desc));
+      }
+    }
+    p.querySelector('[data-bind=goalcount]').textContent = `${G.done.size}/${GOALS.length}`;
+    const gaps = p.querySelector('[data-bind=gaplist]');
+    for (const [k, z] of Object.entries(ZONES)) {
+      const list = G.byZone[k] || [];
+      if (!list.length) continue;
+      const found = list.filter((x) => G.foundGaps.has(x.id));
+      gaps.appendChild(row(found.length === list.length, z.name, found.length ? found.map((x) => x.name).join(', ') : 'None found yet', `${found.length}/${list.length}`));
+    }
+    p.querySelector('[data-bind=gapcount]').textContent = `${G.foundGaps.size}/${G.gaps.length}`;
+    const stats = p.querySelector('[data-bind=statlist]');
+    const S = [
+      ['Lifetime score', Math.round(st.lifetime).toLocaleString()], ['Best combo', Math.round(st.best).toLocaleString()], ['Combos banked', st.combos.toLocaleString()],
+      ['Longest air', st.maxAir.toFixed(1) + ' s'], ['Highest air', st.maxHeight.toFixed(1) + ' m'], ['Biggest spin', st.maxSpin + '°'], ['Flips landed', st.flips.toLocaleString()],
+      ['Distance ground', Math.round(st.grindDist).toLocaleString() + ' m'], ['Longest manual', st.maxManual.toFixed(1) + ' s'], ['Lip trick time', st.stallTime.toFixed(0) + ' s'],
+      ['Wallride distance', Math.round(st.wallDist).toLocaleString() + ' m'], ['Bails', st.bails.toLocaleString()],
+    ];
+    for (const [k, v] of S) { const d = document.createElement('div'); const a = document.createElement('span'), b = document.createElement('b'); a.textContent = k; b.textContent = v; d.append(a, b); stats.appendChild(d); }
   }
 
   renderCustomize() {
@@ -452,7 +504,7 @@ export class UI {
     g.drawImage(this.mapImg, -px, -pz);
     const dot = (x, z, col, r = 3) => { const [mx, mz] = this.worldToMap(x, z, N); g.fillStyle = col; g.beginPath(); g.arc(mx - px, mz - pz, r / scale, 0, 7); g.fill(); };
     for (const m of this.game.courses.markers) if (m.grp.visible) dot(m.course.start.x, m.course.start.z, ZONES[m.course.zone].color, 4);
-    for (const { s } of this.game.courses.sprocketMeshes) dot(s.x, s.z, '#ffd21f', 2.5);
+    for (const { s } of this.game.courses.sprocketMeshes) if (this.game.courses.seen.has(s.id)) dot(s.x, s.z, '#ffd21f', 2.5);
     const ng = this.game.courses.nextGate();
     if (ng) dot(ng.x, ng.z, '#ffffff', 5);
     for (const rp of this.game.net.players.values()) dot(rp.model.root.position.x, rp.model.root.position.z, rp.colors.frame, 4.5);
@@ -481,7 +533,7 @@ export class UI {
       c.fillRect(x - tw / 2, z - 30, tw, 26);
       c.fillStyle = zn.color; c.fillText(zn.name.toUpperCase(), x, z - 10);
     }
-    for (const { s } of g.courses.sprocketMeshes) { const [x, z] = this.worldToMap(s.x, s.z, W); c.fillStyle = '#ffd21f'; c.beginPath(); c.arc(x, z, 4, 0, 7); c.fill(); }
+    for (const { s } of g.courses.sprocketMeshes) { if (!g.courses.seen.has(s.id)) continue; const [x, z] = this.worldToMap(s.x, s.z, W); c.fillStyle = '#ffd21f'; c.beginPath(); c.arc(x, z, 4, 0, 7); c.fill(); }
     for (const m of g.courses.markers) { const [x, z] = this.worldToMap(m.course.start.x, m.course.start.z, W); c.strokeStyle = ZONES[m.course.zone].color; c.lineWidth = 3; c.beginPath(); c.arc(x, z, 7, 0, 7); c.stroke(); }
     for (const rp of g.net.players.values()) { const [x, z] = this.worldToMap(rp.model.root.position.x, rp.model.root.position.z, W); c.fillStyle = rp.colors.frame; c.beginPath(); c.arc(x, z, 7, 0, 7); c.fill(); c.fillStyle = '#fff'; c.fillText(rp.name, x, z - 12); }
     const [px, pz] = this.worldToMap(g.player.pos.x, g.player.pos.z, W);
@@ -526,7 +578,11 @@ export class UI {
     const ctv = cfrac.toFixed(2);
     if (cache.get('ct') !== ctv) { cache.set('ct', ctv); ct.style.transform = `scaleX(${ctv})`; }
     set(el.score, g.tricks.total.toLocaleString());
-    if (this.frame % 15 === 0) set(el.zone, g.zoneName());
+    if (this.frame % 15 === 0) {
+      set(el.zone, g.zoneName());
+      const zk = g.goals.zone, ng = zk && !g.courses.run ? g.goals.next(zk) : null;
+      set(this.goalEl || (this.goalEl = document.getElementById('hud-goal')), ng ? `Goal ${ng.tier}/5 · ${ng.desc}` : zk && !g.courses.run && g.goals.count(zk) === 5 ? 'All goals done here' : '');
+    }
     // combo
     const c = g.tricks.comboText();
     if (c) {

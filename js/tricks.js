@@ -160,6 +160,7 @@ export class Tricks {
     const last = c.parts[c.parts.length - 1];
     if (last) { last.pts += Math.round(c.grind.pts); last.name = c.grind.stall ? `${c.grind.style} (${c.grind.time.toFixed(1)}s)` : `${c.grind.style} (${c.grind.dist.toFixed(1)}m)`; }
     if (c.grind.style === 'Wallride') this.stats.wallDist += c.grind.dist;
+    this.fire({ type: 'grindEnd', style: c.grind.style, dist: c.grind.dist, time: c.grind.time, stall: !!c.grind.stall });
     c.base = Math.round(c.base);
     c.grind = null;
     this.idle = 0;
@@ -183,6 +184,7 @@ export class Tricks {
     const c = this.combo; if (!c || !c.manual) return;
     const last = c.parts[c.parts.length - 1];
     if (last && last.name.startsWith(c.manual.name)) { last.pts += Math.round(c.manual.pts); last.name = `${c.manual.name} (${c.manual.time.toFixed(1)}s)`; }
+    this.fire({ type: 'manualEnd', time: c.manual.time, clean });
     c.manual = null;
     c.base = Math.round(c.base);
     this.idle = 0;

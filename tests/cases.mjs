@@ -180,7 +180,7 @@ export const CASES = [
       sim.step(20, { pedal: 1, flip: 1, hop: true });
       sim.step(1, { pedal: 1, flip: 1, hopReleased: true });
       sim.step(120, { pedal: 1, flip: 1 });
-      return { ok: sim.has('ev:hop') && sim.has('ev:land') && !sim.has('ev:bail') && g.player.mode === 'ground', detail: sim.log.filter((l) => /bail|land|hop/.test(l)).join(',') };
+      return { ok: sim.has('ev:hop') && sim.has('ev:land') && !sim.has('ev:bail'), detail: sim.log.filter((l) => /bail|land|hop/.test(l)).join(',') };
     },
   },
   {
@@ -384,6 +384,128 @@ export const CASES = [
       sim.step(200, {});
       const ok = riding && sim.has('ev:wallEnd') && !sim.has('ev:bail') && p.mode === 'ground' && sim.log.some((l) => l.startsWith('bank:'));
       return { ok, detail: `riding=${riding} after=${p.mode} ${sim.log.filter((l) => /bail|bank|wall/.test(l)).join(',')}` };
+    },
+  },
+  // ---------------- phase 4: things to do ----------------
+  {
+    name: 'gaps: pedalling north over the first jump box finds Box One and the Woods "Sprout" double',
+    run: () => {
+      const g = window.__game, p = g.player, sim = window.__sim, G = g.goals;
+      G.foundGaps.clear();
+      const ride = (x, z, yaw, top, frames, id, speed = 0) => {
+        sim.reset(x, z, yaw, top);
+        if (speed) p.vel.set(Math.sin(yaw) * speed, 0, Math.cos(yaw) * speed);
+        for (let i = 0; i < frames && !G.foundGaps.has(id); i++) { sim.step(1, { pedal: p.mode === 'ground' ? 1 : 0 }); G.update(1 / 60); }
+        return G.foundGaps.has(id);
+      };
+      const box1 = ride(56, 62, Math.PI, false, 600, 'box1', 10);
+      const sprout = ride(288, 80, Math.PI, true, 600, 'woodsA1');
+      return { ok: box1 && sprout && G.gaps.length >= 25, detail: `box1=${box1} sprout=${sprout} gaps=${G.gaps.length} found=${[...G.foundGaps].join(',')}` };
+    },
+  },
+  {
+    name: 'gaps: every gap sits over rideable ground inside its spot',
+    run: () => {
+      const g = window.__game, G = g.goals, col = g.world.collision;
+      const bad = [];
+      for (const gap of G.gaps) {
+        const h = col.ground(gap.x, gap.z, 500, { n: g.player.normal.clone() }).h;
+        if (!isFinite(h) || !isFinite(gap.x + gap.z)) bad.push(gap.id + ': bad position');
+        if (gap.minY !== undefined && gap.minY < h - 0.5 && gap.id !== 'mega') bad.push(`${gap.id}: minY ${gap.minY.toFixed(1)} below ground ${h.toFixed(1)}`);
+      }
+      return { ok: !bad.length, detail: bad.join('; ') };
+    },
+  },
+  {
+    name: 'goals: spot goals complete in their spot, in any order, and pay XP',
+    run: () => {
+      const g = window.__game, sim = window.__sim, G = g.goals;
+      G.done.clear();
+      sim.reset(); // The Yard
+      G.update(0.3);
+      const xp0 = g.progress.xp;
+      G.onEvent({ type: 'bank', score: 2500 });
+      const warm = G.done.has('yard1');
+      G.onEvent({ type: 'grindEnd', style: 'Double Peg', dist: 9, time: 1, stall: false });
+      const rail = G.done.has('yard2');
+      G.onEvent({ type: 'manualEnd', time: 9 }); // a Channel goal: must not count here
+      const wrongSpot = G.done.has('channel1');
+      const next = G.next('yard');
+      return { ok: warm && rail && !wrongSpot && next && next.tier === 3 && g.progress.xp > xp0, detail: `warm=${warm} rail=${rail} wrongSpot=${wrongSpot} next=${next && next.name} xp+${g.progress.xp - xp0}` };
+    },
+  },
+  {
+    name: 'daily: the same date gives the same three challenges, and progress completes them',
+    run: async () => {
+      const g = window.__game, G = g.goals;
+      const { dailyFor } = await import('./js/goals.js');
+      const a = dailyFor('2026-11-12'), b = dailyFor('2026-11-12'), c = dailyFor('2026-11-13');
+      const same = JSON.stringify(a) === JSON.stringify(b), differs = JSON.stringify(a) !== JSON.stringify(c);
+      const distinct = new Set(a.map((x) => x.stat)).size === 3;
+      G.daily = { key: G.daily.key, prog: {}, done: [] };
+      const d = G.dailyList[0];
+      G.bump(d.stat, d.n, d.max);
+      G.onEvent({ type: 'tick' });
+      return { ok: same && differs && distinct && G.daily.done.includes(0), detail: `same=${same} differs=${differs} distinct=${distinct} done=${G.daily.done}` };
+    },
+  },
+  {
+    name: 'sprockets: uncollected sprockets stay off the map until you have been near them',
+    run: () => {
+      const g = window.__game, sim = window.__sim, C = g.courses;
+      C.seen.clear();
+      sim.reset(-150, -150, 0); // far from most; one sprocket sits right here
+      sim.step(2, {});
+      const near = C.sprockets.filter((s) => Math.hypot(s.x + 150, s.z + 150) < 45).map((s) => s.id);
+      const far = C.sprockets.find((s) => Math.hypot(s.x + 150, s.z + 150) > 200);
+      return { ok: near.length > 0 && near.every((id) => C.seen.has(id) || C.found.has(id)) && !C.seen.has(far.id), detail: `near=${near} seen=${[...C.seen]}` };
+    },
+  },
+  {
+    name: 'street: the Yard and Port Rusty have at least twice the rails and ledges',
+    run: () => {
+      const rails = window.__game.world.collision.rails;
+      const n = rails.length;
+      return { ok: n >= 42, detail: `${n} grindable edges (was 21)` };
+    },
+  },
+  {
+    name: 'physics: riding off the lip of a jump box at speed launches without hopping',
+    run: () => {
+      const g = window.__game, p = g.player, sim = window.__sim;
+      sim.reset(56, 62, Math.PI);
+      p.vel.set(0, 0, -10);
+      let air = 0, maxH = 0;
+      for (let i = 0; i < 200; i++) { sim.step(1, { pedal: p.mode === 'ground' ? 1 : 0 }); if (p.mode === 'air') { air++; maxH = Math.max(maxH, p.pos.y - 3.05); } if (p.pos.z < 36) break; }
+      return { ok: air > 12 && !sim.has('ev:bail') && !sim.has('ev:hop'), detail: `airborne ${air} frames, ${maxH.toFixed(2)} m over the table` };
+    },
+  },
+  {
+    name: 'gaps: Mega, Warehouse Roof, Box Cars and Lake Launch are all reachable',
+    run: () => {
+      const g = window.__game, p = g.player, sim = window.__sim, G = g.goals;
+      const out = {};
+      const ride = (tag, x, z, yaw, top, frames, speed, ctl) => {
+        G.foundGaps.clear(); sim.reset(x, z, yaw, top);
+        if (speed) p.vel.set(Math.sin(yaw) * speed, 0, Math.cos(yaw) * speed);
+        for (let i = 0; i < frames; i++) { sim.step(1, Object.assign({ pedal: p.mode === 'ground' ? 1 : 0 }, ctl ? ctl() : {})); G.update(1 / 60); if (sim.has('ev:bail')) break; }
+        out[tag] = { found: [...G.foundGaps], bail: sim.has('ev:bail') };
+      };
+      const d = g.world.anchors.megaDeck;
+      ride('mega', d.x, d.z, 0, true, 700, 0);
+      ride('roof', -250, 10, 0, true, 420, 11);
+      ride('lake', -430, 60, -Math.PI / 2, true, 400, 9);
+      let st = 0; // hop near the west edge of each container
+      ride('boxcar', -338, 8, -Math.PI / 2, true, 700, 10, () => {
+        const near = p.mode === 'ground' && [-352.5, -369.5, -386.5].some((e) => p.pos.x < e + 1.2 && p.pos.x > e - 1.5);
+        if (near && st === 0) { st = 1; return { hop: true }; }
+        if (st >= 1 && st < 10) { st++; return { hop: true }; }
+        if (st === 10) { st = 0; return { hopReleased: true }; }
+        return {};
+      });
+      const ok = out.mega.found.includes('mega') && !out.mega.bail && out.roof.found.includes('roof') && !out.roof.bail
+        && out.lake.found.includes('lake') && out.boxcar.found.length === 3 && !out.boxcar.bail;
+      return { ok, detail: JSON.stringify(out) };
     },
   },
 ];

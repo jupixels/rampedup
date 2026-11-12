@@ -120,6 +120,7 @@ export class Courses {
     this.list = defineCourses(w);
     this.sprockets = defineSprockets(w);
     this.found = new Set(store('sprockets') || []);
+    this.seen = new Set(store('sprocketsSeen') || []); // spotted but not yet collected: these show on the map
     this.best = store('best') || {};
     this.medals = store('medals') || {};
     this.done = new Set(store('challenges') || []);
@@ -361,6 +362,7 @@ export class Courses {
     for (let i = this.sprocketMeshes.length - 1; i >= 0; i--) {
       const { s, m } = this.sprocketMeshes[i];
       const dx = p.pos.x - s.x, dy = p.pos.y + 0.9 - s.y, dz = p.pos.z - s.z;
+      if (!this.seen.has(s.id) && dx * dx + dz * dz < 45 * 45) { this.seen.add(s.id); store('sprocketsSeen', [...this.seen]); }
       if (dx * dx + dy * dy + dz * dz < 2.2 * 2.2 && p.mode !== 'bail') {
         this.group.remove(m);
         this.sprocketMeshes.splice(i, 1);
@@ -477,6 +479,7 @@ export class Courses {
     g.progress?.add(150 + medal * 250 + (isBest ? 150 : 0), c.name);
     if (r.opts.race) g.net.sendFinish(c.id, result);
     this.checkChallenges({ type: 'courseDone', medal, course: c });
+    g.goals?.onEvent({ type: 'courseDone', medal, course: c });
   }
 
   checkChallenges(ev) {
