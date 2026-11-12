@@ -535,7 +535,7 @@ export class UI {
       set(el.comboScore, `${c.base.toLocaleString()} <em>×${c.mult}</em>`, true);
     } else cls(el.combo, 'on', false);
     // balance meter
-    const bal = p.grind ? p.grind.bal : p.manual ? p.manual.bal : null;
+    const bal = p.grind ? p.grind.bal : p.stall ? p.stall.bal : p.manual ? p.manual.bal : null;
     cls(el.balance, 'hidden', bal === null);
     if (bal !== null) {
       const i = el.balance.firstElementChild;
@@ -543,7 +543,7 @@ export class UI {
       const col = Math.abs(bal) > 0.7 ? '#ff3b3b' : Math.abs(bal) > 0.4 ? '#ffd21f' : '#57e08a';
       if (cache.get('balcol') !== col) { cache.set('balcol', col); i.style.background = col; }
       const dev = g.input.device(), L = (a) => g.input.label(a);
-      set(el.balance.lastElementChild, dev === 'kb' ? (p.grind ? `Balance  ${L('left')} / ${L('right')}` : `Balance  ${L('pedal')} / ${L('brake')}`) : (p.grind ? 'Balance · stick left / right' : 'Balance · stick up / down'));
+      set(el.balance.lastElementChild, dev === 'kb' ? (p.grind || p.stall ? `Balance  ${L('left')} / ${L('right')}` : `Balance  ${L('pedal')} / ${L('brake')}`) : (p.grind || p.stall ? 'Balance · stick left / right' : 'Balance · stick up / down'));
     }
     // course
     const r = g.courses.run;

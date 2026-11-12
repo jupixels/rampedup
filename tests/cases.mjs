@@ -304,4 +304,86 @@ export const CASES = [
       return { ok: before && q && !space && label === 'Q' && restored && saved.includes('KeyQ'), detail: `space=${before} Q=${q} spaceAfter=${space} label=${label} restored=${restored} saved=${saved}` };
     },
   },
+  // ---------------- phase 3: trick depth ----------------
+  {
+    name: 'tricks: manual button + trick gives the variation (X-Up)',
+    run: () => {
+      const g = window.__game, p = g.player, sim = window.__sim;
+      sim.reset();
+      sim.step(60, { pedal: 1 }); sim.step(12, { hop: true }); sim.step(1, { hopReleased: true });
+      p.vel.y = 9;
+      sim.step(3, {});
+      sim.step(1, { manual: true, tricks: { barspin: true }, trickHeld: { barspin: true } });
+      const type = p.anim && p.anim.type;
+      sim.step(40, { manual: true });
+      const pose = g.player.model.pose.xup;
+      sim.step(200, {});
+      return { ok: type === 'xup' && sim.log.some((l) => l.startsWith('land:X-Up')) && !sim.has('ev:bail'), detail: `anim=${type} pose=${pose.toFixed(2)} ${sim.log.filter((l) => /^land|bail/.test(l)).join(',')}` };
+    },
+  },
+  {
+    name: 'tricks: a 360 with a barspin is a Truckdriver',
+    run: () => {
+      const g = window.__game, p = g.player, sim = window.__sim;
+      sim.reset(-60, 30, Math.PI / 2);
+      sim.step(90, { pedal: 1 }); sim.step(12, { hop: true }); sim.step(1, { hopReleased: true });
+      p.vel.y = 10;
+      sim.step(1, { tricks: { barspin: true } });
+      for (let i = 0; i < 400 && p.mode === 'air'; i++) sim.step(1, { steer: Math.abs(p.air.spin) < 5.6 ? 1 : 0 });
+      sim.step(60, {});
+      return { ok: sim.log.some((l) => l.startsWith('land:Truckdriver')) && !sim.has('ev:bail'), detail: sim.log.filter((l) => /^land|bail/.test(l)).join(',') };
+    },
+  },
+  {
+    name: 'tricks: variety bonus pays for mixing tricks',
+    run: () => {
+      const g = window.__game, sim = window.__sim;
+      sim.reset();
+      let ev = null; g.tricks.on((e) => { if (e.type === 'bank') ev = e; });
+      for (const n of ['A', 'B', 'C', 'D', 'E']) g.tricks.addTrick('Test ' + n, 100);
+      g.tricks.bank();
+      return { ok: !!ev && Math.abs(ev.variety - 0.2) < 1e-9 && ev.score === Math.round(500 * 5 * 1.2), detail: ev ? `score=${ev.score} variety=${ev.variety}` : 'no bank' };
+    },
+  },
+  {
+    name: 'lip tricks: holding manual on the way back to the coping stalls, hop drops back in',
+    run: () => {
+      const g = window.__game, p = g.player, sim = window.__sim;
+      sim.reset(-35, -28, Math.PI);
+      let stalled = false, style = '', t = 0;
+      for (let i = 0; i < 900 && !stalled; i++) {
+        const air = p.mode === 'air' && p.air && p.air.vert;
+        sim.step(1, air ? { manual: p.vel.y < 0 } : { pedal: 1 });
+        if (p.mode === 'stall') { stalled = true; style = p.stall.style; }
+        if (sim.has('ev:bail')) break;
+      }
+      const pre = sim.log.filter((l) => /bail|stall|takeoff/.test(l)).join(',');
+      if (!stalled) return { ok: false, detail: 'never stalled: ' + pre + ` mode=${p.mode}` };
+      for (let i = 0; i < 90; i++) { p.stall.bal = 0; p.stall.balVel = 0; sim.step(1, {}); }
+      t = p.stall.time;
+      sim.step(1, { hop: true, hopPressed: true });
+      const left = p.mode === 'air';
+      sim.step(240, {});
+      const ok = left && t > 1.4 && !sim.has('ev:bail') && p.mode === 'ground' && sim.log.some((l) => l.startsWith('bank:'));
+      return { ok, detail: `style=${style} held=${t.toFixed(1)}s after=${p.mode} ${sim.log.filter((l) => /bail|bank/.test(l)).join(',')}` };
+    },
+  },
+  {
+    name: 'wallride: a shallow approach sticks to a marked wall, hop pushes off',
+    run: () => {
+      const g = window.__game, p = g.player, sim = window.__sim;
+      sim.reset(-29, 64.7, Math.PI / 2);
+      sim.step(8, { hop: true }); sim.step(1, { hopReleased: true });
+      p.vel.set(7.5, 5, 1.2); // along the wall, drifting into it
+      let on = false;
+      for (let i = 0; i < 90 && !on; i++) { sim.step(1, {}); on = p.mode === 'wall'; }
+      if (!on) return { ok: false, detail: `never stuck: mode=${p.mode} pos=${p.pos.x.toFixed(1)},${p.pos.y.toFixed(1)},${p.pos.z.toFixed(1)} walls=${g.world.collision.walls.length} ${sim.log.filter((l) => /bail|bump|land/.test(l)).join(',')}` };
+      sim.step(20, {});
+      const riding = p.mode === 'wall';
+      sim.step(1, { hop: true, hopPressed: true });
+      sim.step(200, {});
+      const ok = riding && sim.has('ev:wallEnd') && !sim.has('ev:bail') && p.mode === 'ground' && sim.log.some((l) => l.startsWith('bank:'));
+      return { ok, detail: `riding=${riding} after=${p.mode} ${sim.log.filter((l) => /bail|bank|wall/.test(l)).join(',')}` };
+    },
+  },
 ];

@@ -326,7 +326,7 @@ class Game {
       this.ui.feed(`${e.name}  +${e.pts.toLocaleString()}`);
     }
     if (e.type === 'bank') {
-      this.ui.bankPop(`+${e.score.toLocaleString()}`);
+      this.ui.bankPop(`+${e.score.toLocaleString()}${e.variety ? ` · variety +${Math.round(e.variety * 100)}%` : ''}`);
       this.progress.add(Math.max(5, e.score / 8), e.mult > 1 ? `${e.mult}x combo` : '');
       if (e.score >= 8000) this.audio.play('bigCombo');
       if (e.score >= 10000 && this.net.online) this.net.send({ t: 'feed', text: `landed a ${e.score.toLocaleString()} pt combo` });
@@ -358,6 +358,11 @@ class Game {
         case 'grindStart':
           this.audio.play('grind');
           if (p.grind) this.fx.sparks(p.pos.clone().add(new THREE.Vector3(0, 0.22, 0)), p.grind.rail.dir.clone().multiplyScalar(p.grind.sign), 14);
+          break;
+        case 'stallStart': this.audio.play('grind', { volume: 0.7 }); this.cam.addShake(0.15); break;
+        case 'wallStart':
+          this.audio.play('land', { volume: 0.8 });
+          if (p.wall) this.fx.dust(p.pos, 'concrete', 8, 0.5);
           break;
         case 'bail': {
           this.audio.play('bail');

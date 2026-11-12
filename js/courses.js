@@ -402,7 +402,7 @@ export class Courses {
     r.time += dt;
     // record ghost frames @ 15Hz
     r.recT += dt;
-    if (r.recT >= 1 / 15) { r.recT = 0; r.rec.push([+r.time.toFixed(3), ...p.snapshot().slice(0, 20)]); }
+    if (r.recT >= 1 / 15) { r.recT = 0; r.rec.push([+r.time.toFixed(3), ...p.snapshot()]); }
     this.playGhost(r.time);
     if (r.course.type === 'score') {
       if (r.time >= r.course.duration) this.finish();
@@ -513,5 +513,8 @@ export function applySnapshot(model, a, b, t) {
   P.steer = L(8); P.barspin = Math.abs(b[9] - a[9]) > 3 ? b[9] : L(9); P.whip = Math.abs(b[10] - a[10]) > 3 ? b[10] : L(10);
   P.crouch = L(11); P.shift = L(12); P.superman = L(13); P.nohander = L(14); P.cancan = L(15); P.nofooter = L(16); P.tuck = L(17);
   P.crank = a[18]; P.wheel = a[19];
+  // newer snapshots carry the variation poses; older ghosts simply don't have them
+  const X = (i) => (a.length > i && b.length > i ? L(i) : 0);
+  P.xup = X(22); P.turndown = X(23); P.tucknh = X(24); P.seat = X(25); P.onefoot = X(26);
   model.updatePose();
 }

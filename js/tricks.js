@@ -5,7 +5,27 @@ import { store } from './util.js';
 const SPIN_PTS = { 180: 100, 360: 300, 540: 650, 720: 1100, 900: 1800, 1080: 2700, 1260: 3800, 1440: 5000 };
 const FLIP_NAMES = { 1: 'Backflip', 2: 'Double Backflip', 3: 'Triple Backflip' };
 const FFLIP_NAMES = { 1: 'Frontflip', 2: 'Double Frontflip', 3: 'Triple Frontflip' };
-const ANIM_PTS = { barspin: 350, tailwhip: 700, superman: 450, nohander: 400, cancan: 350, tabletop: 380, nofooter: 400 };
+const ANIM_PTS = { barspin: 350, tailwhip: 700, superman: 450, nohander: 400, cancan: 350, tabletop: 380, nofooter: 400,
+  xup: 300, turndown: 560, tucknh: 520, seatgrab: 620, onefooter: 300 };
+
+// Real BMX names for classic combinations. `c` = counts of each animated trick in the air.
+// First match wins; a named combo replaces the generic "360 Barspin"-style name and scores 10% more.
+const only = (c, want) => Object.keys(c).length === Object.keys(want).length && Object.entries(want).every(([k, n]) => c[k] === n);
+const NAMED = [
+  { name: 'Flair', test: (a, deg, flips, c) => a.vert && flips === -1 && deg === 180 && only(c, {}) },
+  { name: 'Flair Whip', test: (a, deg, flips, c) => a.vert && flips === -1 && deg === 180 && only(c, { tailwhip: 1 }) },
+  { name: 'Truckdriver', test: (a, deg, flips, c) => !a.vert && flips === 0 && deg === 360 && only(c, { barspin: 1 }) },
+  { name: 'Double Truckdriver', test: (a, deg, flips, c) => !a.vert && flips === 0 && deg === 360 && only(c, { barspin: 2 }) },
+  { name: '360 Whip', test: (a, deg, flips, c) => !a.vert && flips === 0 && deg === 360 && only(c, { tailwhip: 1 }) },
+  { name: 'Flipwhip', test: (a, deg, flips, c) => flips === -1 && deg < 180 && only(c, { tailwhip: 1 }) },
+  { name: 'Double Flipwhip', test: (a, deg, flips, c) => flips === -1 && deg < 180 && only(c, { tailwhip: 2 }) },
+  { name: 'Bar Flip', test: (a, deg, flips, c) => flips === -1 && deg < 180 && only(c, { barspin: 1 }) },
+  { name: 'Superflip', test: (a, deg, flips, c) => flips === -1 && deg < 180 && only(c, { superman: 1 }) },
+  { name: 'Cash Roll', test: (a, deg, flips, c) => !a.vert && flips === -1 && deg === 360 && only(c, {}) },
+  { name: 'Whip to Bar', test: (a, deg, flips, c) => flips === 0 && deg < 180 && only(c, { tailwhip: 1, barspin: 1 }) },
+  { name: 'Decade', test: (a, deg, flips, c) => flips === 0 && deg < 180 && only(c, { tailwhip: 2, barspin: 1 }) },
+  { name: 'Suicide No Hander', test: (a, deg, flips, c) => flips === 0 && deg < 180 && only(c, { tucknh: 1, nohander: 1 }) },
+];
 
 export class Tricks {
   constructor(game) {
@@ -16,7 +36,7 @@ export class Tricks {
     this.idle = 0;
     this.feed = []; // recent notable landings
     // lifetime stats: saved between sessions
-    this.stats = { maxAir: 0, maxHeight: 0, grindDist: 0, manualTime: 0, maxManual: 0, bails: 0, flips: 0, longestCombo: 0, maxSpin: 0, best: 0, lifetime: 0, combos: 0 };
+    this.stats = { maxAir: 0, maxHeight: 0, grindDist: 0, manualTime: 0, maxManual: 0, bails: 0, flips: 0, longestCombo: 0, maxSpin: 0, best: 0, lifetime: 0, combos: 0, spinL: 0, spinR: 0, stallTime: 0, wallDist: 0 };
     const saved = store('stats');
     if (saved && typeof saved === 'object') for (const k of Object.keys(this.stats)) if (typeof saved[k] === 'number' && isFinite(saved[k])) this.stats[k] = saved[k];
     this.best = this.stats.best;
@@ -78,10 +98,21 @@ export class Tricks {
       const hold = air.tricks.filter((t) => t.type === type).reduce((a, t) => a + t.hold, 0);
       pts += ANIM_PTS[type] * n * (n > 1 ? 1.3 : 1) + hold * 600;
     }
-    // compose a name like "360 Backflip Tailwhip"
-    if (spinName && spinName !== 'Air') names.push(spinName);
-    if (flipName) names.push(flipName);
-    names.push(...animNames);
+    // compose a name like "360 Backflip Tailwhip", unless the combination has a name of its own
+    const named = NAMED.find((n) => n.test(air, deg, flips, counts));
+    if (named) { names.push(named.name); pts *= 1.1; }
+    else {
+      if (spinName && spinName !== 'Air') names.push(spinName);
+      if (flipName) names.push(flipName);
+      names.push(...animNames);
+    }
+    // spinning against your usual direction is harder: "Opposite" pays 25% more
+    if (deg >= 180 && !air.vert) {
+      const dir = air.spin > 0 ? 'spinL' : 'spinR', other = air.spin > 0 ? 'spinR' : 'spinL';
+      const st = this.stats;
+      if (st[dir] + st[other] >= 10 && st[other] > st[dir] * 2) { names.unshift('Opposite'); pts *= 1.25; }
+      st[dir]++;
+    }
     // out of fakie: a 180 is a Half Cab, a 360 a Full Cab; anything else gets a Fakie prefix
     const cab = info.fakieStart && !flips && !animNames.length && (deg === 180 || deg === 360) && !air.vert;
     if (cab) { names.length = 0; names.push(deg === 180 ? 'Half Cab' : 'Full Cab'); pts += 80; }
@@ -111,13 +142,24 @@ export class Tricks {
     c.grind.time += dt; c.grind.dist += d;
     const p = d * 40;
     c.grind.pts += p; c.base += p;
-    this.stats.grindDist += d;
+    if (c.grind.style !== 'Wallride') this.stats.grindDist += d;
+    this.idle = 0;
+  }
+  // lip tricks pay by the second
+  stallTick(dt) {
+    const c = this.combo; if (!c || !c.grind) return;
+    c.grind.time += dt;
+    const p = dt * 260;
+    c.grind.pts += p; c.base += p;
+    c.grind.stall = true;
+    this.stats.stallTime += dt;
     this.idle = 0;
   }
   grindEnd() {
     const c = this.combo; if (!c || !c.grind) return;
     const last = c.parts[c.parts.length - 1];
-    if (last) { last.pts += Math.round(c.grind.pts); last.name = `${c.grind.style} (${c.grind.dist.toFixed(1)}m)`; }
+    if (last) { last.pts += Math.round(c.grind.pts); last.name = c.grind.stall ? `${c.grind.style} (${c.grind.time.toFixed(1)}s)` : `${c.grind.style} (${c.grind.dist.toFixed(1)}m)`; }
+    if (c.grind.style === 'Wallride') this.stats.wallDist += c.grind.dist;
     c.base = Math.round(c.base);
     c.grind = null;
     this.idle = 0;
@@ -170,14 +212,17 @@ export class Tricks {
     this.combo = null;
     if (!c || !c.parts.length) return;
     const mult = Math.max(1, c.mult);
-    const score = Math.round(c.base * mult);
+    // variety bonus: 10% for every different trick beyond the third, up to 50%
+    const kinds = Object.keys(c.seen).filter((k) => !['Sprocket', 'Perfect Landing', 'Revert'].includes(k)).length;
+    const variety = Math.min(0.5, Math.max(0, kinds - 3) * 0.1);
+    const score = Math.round(c.base * mult * (1 + variety));
     this.total += score;
     this.best = Math.max(this.best, score);
     this.stats.longestCombo = Math.max(this.stats.longestCombo, c.parts.length);
     this.stats.best = this.best; this.stats.lifetime += score; this.stats.combos++;
     this.saveStats();
     const label = c.parts.map((p) => p.name).join(' + ');
-    this.fire({ type: 'bank', score, mult, base: Math.round(c.base), label, parts: c.parts });
+    this.fire({ type: 'bank', score, mult, base: Math.round(c.base), label, parts: c.parts, variety });
   }
 
   saveStats() { store('stats', this.stats); }
@@ -186,7 +231,7 @@ export class Tricks {
     const c = this.combo;
     if (!c) return null;
     let names = c.parts.map((p) => p.name);
-    if (c.grind) names[names.length - 1] = `${c.grind.style} ${c.grind.dist.toFixed(1)}m`;
+    if (c.grind) names[names.length - 1] = c.grind.stall ? `${c.grind.style} ${c.grind.time.toFixed(1)}s` : `${c.grind.style} ${c.grind.dist.toFixed(1)}m`;
     if (c.manual) names[names.length - 1] = `${c.manual.name} ${c.manual.time.toFixed(1)}s`;
     if (names.length > 5) names = ['…', ...names.slice(-5)];
     return { text: names.join(' + '), base: Math.round(c.base), mult: Math.max(1, c.mult) };

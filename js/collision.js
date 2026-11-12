@@ -16,6 +16,7 @@ export class Collision {
     this.railGrid = new Map();
     this._n = new THREE.Vector3();
     this.waterLevel = -1e9;
+    this.walls = [];
   }
 
   addTriangle(ax, ay, az, bx, by, bz, cx, cy, cz, surface = 'concrete') {
@@ -118,6 +119,30 @@ export class Collision {
       arr.push(r);
     }
     return r;
+  }
+
+  // A rideable wall face: a vertical rectangle from (ax,az) to (bx,bz), y0..y1, facing (nx,nz).
+  addWall(ax, az, bx, bz, y0, y1, nx, nz) {
+    const len = Math.hypot(bx - ax, bz - az);
+    if (len < 2) return;
+    this.walls.push({ ax, az, bx, bz, y0, y1, nx, nz, dx: (bx - ax) / len, dz: (bz - az) / len, len });
+  }
+
+  // The wall face the point is just in front of (within `reach`), or null.
+  wallNear(x, z, y, reach = 0.7) {
+    for (let i = 0; i < this.walls.length; i++) {
+      const w = this.walls[i];
+      const rx = x - w.ax, rz = z - w.az;
+      const d = rx * w.nx + rz * w.nz;
+      if (d < -0.05 || d > reach) continue;
+      const t = rx * w.dx + rz * w.dz;
+      if (t < 0.4 || t > w.len - 0.4) continue;
+      if (y < w.y0 + 0.15 || y > w.y1 - 0.35) continue;
+      this._wall = this._wall || { w: null, d: 0, t: 0 };
+      this._wall.w = w; this._wall.d = d; this._wall.t = t;
+      return this._wall;
+    }
+    return null;
   }
 
   railsNear(x, z) {
