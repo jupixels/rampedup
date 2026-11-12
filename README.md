@@ -25,7 +25,7 @@ Share `?room=CODE` links to drop friends straight into your session.
   - **The Channel** — a 120 m banked concrete ditch.
   - **Summit Ridge** — the top of a ~870 m downhill trail with doubles, drops and rollers.
 - **Real-feeling BMX physics** — pedalling, momentum, transitions and quarter pipes, vert airs that bring you back in, bunny hops (with late pop off lips), manuals, peg and ledge grinds with balance, and full ragdoll bails: rider and bike tumble separately with slow-mo and a caption for every crash.
-- **Tricks & combos** — 180–1440 spins, front and back flips (doubles too), barspins, tailwhips, supermans, no-handers, can-cans, table tops and no-footers. Hold the button to extend a pose. Chain airs, grinds and manuals to build the multiplier; bail and the combo is gone.
+- **Tricks & combos** — 180–1440 spins, front and back flips (doubles too), barspins, tailwhips, supermans, no-handers, can-cans, table tops and no-footers, plus five variations (X-up, turndown, tuck no-hander, seat grab, one-footer), lip tricks on coping, wallrides, fakie tricks and real names for classic combos (Truckdriver, Flipwhip, Flair…). Hold the button to extend a pose. Chain airs, grinds and manuals to build the multiplier; bail and the combo is gone.
 - **Obstacle courses** — five timed gate courses plus two score-attack modes, bronze/silver/gold medals, personal bests, and a **ghost** of your best run to race.
 - **38 golden sprockets** hidden around the world and **18 challenges** to complete. Progress is saved in your browser.
 - **Multiplayer** — peer-to-peer over WebRTC (PeerJS), so it works on static hosting. Quick Join a public room or host a private one with a 5-letter code. See other riders live with name tags, chat, a scoreboard, a trick feed, and **host-started races** with synced countdowns and results. If the host leaves, someone else takes over the room.
@@ -39,7 +39,7 @@ Share `?room=CODE` links to drop friends straight into your session.
 
 ## New to BMX games?
 
-Pick **Tutorial** in the main menu for a 14-step guided run (pedal, hop, air, spins, barspin, grind, manual, combos, flips, map), or open the **Guide** for every control, trick, spot and rule.
+Pick **Tutorial** in the main menu for a 16-step guided run (pedal, hop, air, spins, barspin, grind, lip trick, variations, manual, combos, flips, map), or open the **Guide** for every control, trick, spot and rule.
 
 ## Controls
 

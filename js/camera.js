@@ -33,6 +33,8 @@ export class ChaseCamera {
 
   snap(player) {
     this.yaw = player.heading;
+    // start clean: a landing dip or shake left over from before the jump-cut must not carry across
+    this.dip = 0; this.dipV = 0; this.shake = 0; this.airPull = 0; this.orbitYaw = 0; this.orbitPitch = 0;
     this.update(1, player, { orbitX: 0, orbitY: 0 }, true);
   }
 
@@ -68,8 +70,12 @@ export class ChaseCamera {
     height += this.airPull * 0.35;
     if (player.mode === 'bail') dist *= 1.15;
     // spring for the landing dip
-    this.dipV += (-this.dip * 90 - this.dipV * 12) * dt;
-    this.dip += this.dipV * dt;
+    // (the spring is only stable for small steps, so long frames are sub-stepped)
+    for (let left = Math.min(dt, 0.25); left > 1e-6; left -= 1 / 120) {
+      const h = Math.min(left, 1 / 120);
+      this.dipV += (-this.dip * 90 - this.dipV * 12) * h;
+      this.dip += this.dipV * h;
+    }
     const pitch = 0.22 + this.orbitPitch;
     const target = new THREE.Vector3(p.x, p.y + lookH, p.z);
     if (player.mode === 'bail' && player.bail) target.copy(player.bail.riderPos);

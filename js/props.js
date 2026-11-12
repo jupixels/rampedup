@@ -408,6 +408,12 @@ export class Builder {
       const cm = this.matrix(x, y + (sy ? H - 0.06 : 0.06), z, yaw).multiply(new THREE.Matrix4().makeTranslation(sx * (L / 2 - 0.09), 0, sz * (W / 2 - 0.09)));
       this.add(cg, 'steel', cm, { cast: false });
     }
+    // both long sides can be wallridden
+    const ux = Math.cos(yaw), uz = -Math.sin(yaw), nx = Math.sin(yaw), nz = Math.cos(yaw);
+    for (const s of [-1, 1]) {
+      const cx = x + nx * s * W / 2, cz = z + nz * s * W / 2;
+      this.col.addWall(cx - ux * L / 2, cz - uz * L / 2, cx + ux * L / 2, cz + uz * L / 2, y, y + H, nx * s, nz * s);
+    }
     return { top: y + H };
   }
 
@@ -444,6 +450,13 @@ export class Builder {
   graffitiWall(x, z, yaw, w = 8, h = 2.4, idx = 0) {
     const y = this.groundY(x, z);
     const r = this.box({ x, z, y, w, h, d: 0.4, yaw, mat: 'concreteDark', surface: 'concrete', tile: 3 });
+    {
+      const ux = Math.cos(yaw), uz = -Math.sin(yaw), nx = Math.sin(yaw), nz = Math.cos(yaw);
+      for (const s of [-1, 1]) {
+        const cx = x + nx * s * 0.2, cz = z + nz * s * 0.2;
+        this.col.addWall(cx - ux * w / 2, cz - uz * w / 2, cx + ux * w / 2, cz + uz * w / 2, y, y + h, nx * s, nz * s);
+      }
+    }
     const tex = graffitiTexture(idx);
     const mat = new THREE.MeshStandardMaterial({ map: tex, transparent: true, roughness: 0.85, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
     for (const s of [-1, 1]) {

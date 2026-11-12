@@ -19,7 +19,14 @@ export const TRICK_ANIMS = {
   cancan:   { dur: 0.54, label: 'Can Can', hold: true },
   tabletop: { dur: 0.6,  label: 'Table Top', hold: true },
   nofooter: { dur: 0.54, label: 'No Footer', hold: true },
+  // variations: hold the manual button and press the base trick
+  xup:       { dur: 0.5,  label: 'X-Up', hold: true, base: 'barspin' },
+  turndown:  { dur: 0.62, label: 'Turndown', hold: true, base: 'tabletop' },
+  tucknh:    { dur: 0.58, label: 'Tuck No Hander', hold: true, base: 'nohander' },
+  seatgrab:  { dur: 0.7,  label: 'Superman Seat Grab', hold: true, base: 'superman' },
+  onefooter: { dur: 0.5,  label: 'One Footer', hold: true, base: 'nofooter' },
 };
+export const VARIANT_OF = { barspin: 'xup', tabletop: 'turndown', nohander: 'tucknh', superman: 'seatgrab', nofooter: 'onefooter' };
 
 const tmpV = new THREE.Vector3(), tmpV2 = new THREE.Vector3(), tmpQ = new THREE.Quaternion();
 const UP = new THREE.Vector3(0, 1, 0);
@@ -52,6 +59,9 @@ export class Player {
     this.sinceAir = 0;
     this.air = null;     // air state
     this.grind = null;
+    this.stall = null;   // lip trick on coping
+    this.wall = null;    // wallride
+    this.leftWall = null;
     this.manual = null;
     this.bail = null;
     this.anim = null;
@@ -82,13 +92,13 @@ export class Player {
     this.heading = this.visHeading = heading;
     this.mode = 'ground';
     this.normal.copy(g.n); this.visNormal.copy(g.n);
-    this.air = this.grind = this.manual = this.bail = this.anim = null;
+    this.air = this.grind = this.manual = this.bail = this.anim = this.stall = this.wall = null;
     this.fakie = false; this.brakeLock = false;
     this.animQueue.length = 0;
     this.model.rider.position.set(0, 0, 0); this.model.rider.rotation.set(0, 0, 0);
     this.model.bike.position.set(0, 0, 0); this.model.bike.rotation.set(0, 0, 0);
     this.lastSafe.pos.copy(this.pos); this.lastSafe.heading = heading;
-    Object.assign(this.model.pose, { barspin: 0, whip: 0, superman: 0, nohander: 0, cancan: 0, nofooter: 0, tuck: 0 });
+    Object.assign(this.model.pose, { barspin: 0, whip: 0, superman: 0, nohander: 0, cancan: 0, nofooter: 0, tuck: 0, xup: 0, turndown: 0, tucknh: 0, seat: 0, onefoot: 0 });
     this.tableRoll = 0;
     this.updateVisual(1);
   }
@@ -101,7 +111,7 @@ export class Player {
     if (this.frozen) { this.updateVisual(dt); return; }
     if (this.mode === 'bail') { this.updateBail(dt, input); return; }
     // hop preload
-    if (input.hop && this.mode !== 'air') this.preload = Math.min(1, this.preload + dt / 0.28);
+    if (input.hop && this.mode !== 'air' && this.mode !== 'wall') this.preload = Math.min(1, this.preload + dt / 0.28);
     const released = input.hopReleased;
     // the key went up without us seeing it (lost focus, pause): drop the stored hop
     if (!input.hop && !released && this.mode !== 'air') this.preload = 0;
@@ -113,6 +123,8 @@ export class Player {
       if (this.mode === 'ground') this.stepGround(h, input, i === 0 && released);
       else if (this.mode === 'air') this.stepAir(h, input, i === 0 && released);
       else if (this.mode === 'grind') this.stepGrind(h, input, i === 0 && input.hopPressed);
+      else if (this.mode === 'stall') this.stepStall(h, input, i === 0 && input.hopPressed);
+      else if (this.mode === 'wall') this.stepWall(h, input, i === 0 && input.hopPressed);
       if (this.mode === 'bail') break;
     }
     if (released) this.preload = 0;
@@ -264,6 +276,7 @@ export class Player {
       vert, hopped, tricks: [], launchNormal: this.normal.clone(), trajPitch: 0,
       targetHeading: null, popWindow: hopped ? 0 : 0.2, fromGrind: false,
       flipArmed: this.classic, fakieStart: this.fakie,
+      lip: vert ? this.pos.clone() : null, lipN: null,
     };
     this.fakie = false;
     if (vert) {
@@ -275,6 +288,7 @@ export class Player {
         const want = 0.55 + Math.min(1.2, sp * 0.03);
         this.vel.x += nh.x * (want - along); this.vel.z += nh.z * (want - along);
         this.air.targetHeading = Math.atan2(nh.x, nh.z);
+        this.air.lipN = nh.clone();
       }
     }
     if (this.manual) this.endManual(false, true);
@@ -287,8 +301,10 @@ export class Player {
     const order = ['barspin', 'tailwhip', 'superman', 'nohander', 'cancan', 'tabletop', 'nofooter'];
     for (const k of order) {
       if (input.tricks[k]) {
-        if (!this.anim) this.startAnim(k);
-        else if (this.animQueue.length < 2) this.animQueue.push(k);
+        // holding the manual button turns a trick into its variation
+        const t = input.manual && VARIANT_OF[k] ? VARIANT_OF[k] : k;
+        if (!this.anim) this.startAnim(t);
+        else if (this.animQueue.length < 2) this.animQueue.push(t);
       }
     }
   }
@@ -302,11 +318,11 @@ export class Player {
     const P = this.model.pose;
     const a = this.anim;
     P.barspin = 0; P.whip = 0;
-    let sup = 0, nh = 0, cc = 0, nf = 0;
+    let sup = 0, nh = 0, cc = 0, nf = 0, xu = 0, td = 0, tn = 0, sg = 0, of = 0;
     this.tableRoll = damp(this.tableRoll || 0, 0, 10, dt);
     if (a) {
       const def = TRICK_ANIMS[a.type];
-      const holding = def.hold && input.trickHeld[a.type] && a.t / a.dur > 0.4 && this.mode === 'air';
+      const holding = def.hold && input.trickHeld[def.base || a.type] && a.t / a.dur > 0.4 && this.mode === 'air';
       if (holding) a.holdTime += dt; else a.t += dt;
       const u = clamp(a.t / a.dur, 0, 1);
       const e = envelope(a.t, a.dur, holding);
@@ -319,6 +335,11 @@ export class Player {
         case 'cancan': cc = e; break;
         case 'nofooter': nf = e; break;
         case 'tabletop': this.tableRoll = e * 1.15; break;
+        case 'xup': xu = e; break;
+        case 'turndown': td = e; this.tableRoll = -e * 0.85; break;
+        case 'tucknh': tn = e; break;
+        case 'seatgrab': sup = e; sg = e; break;
+        case 'onefooter': of = e; break;
       }
       if (a.t >= a.dur) {
         if (this.air) this.air.tricks.push({ type: a.type, hold: a.holdTime });
@@ -332,6 +353,8 @@ export class Player {
     P.nohander = damp(P.nohander, nh, 18, dt);
     P.cancan = damp(P.cancan, cc, 18, dt);
     P.nofooter = damp(P.nofooter, nf, 18, dt);
+    P.xup = damp(P.xup, xu, 18, dt); P.turndown = damp(P.turndown, td, 18, dt); P.tucknh = damp(P.tucknh, tn, 18, dt);
+    P.seat = damp(P.seat, sg, 18, dt); P.onefoot = damp(P.onefoot, of, 18, dt);
     this.netAnim.type = a ? Object.keys(TRICK_ANIMS).indexOf(a.type) + 1 : 0;
     this.netAnim.t = a ? a.t / a.dur : 0;
   }
@@ -392,6 +415,10 @@ export class Player {
     A.flip += A.flipVel * dt;
     // integrate
     const nx = this.pos.x + this.vel.x * dt, ny = this.pos.y + this.vel.y * dt, nz = this.pos.z + this.vel.z * dt;
+    // wallride: come at a marked wall on a shallow angle and the tyres stick
+    if (A.t > 0.12 && this.tryWall(nx, ny, nz)) return;
+    // lip trick: hold the manual button as you come back down to the coping
+    if (A.lip && A.lipN && input.manual && this.vel.y < 0 && A.t > 0.35 && Math.abs(ny - A.lip.y) < 0.4 && Math.hypot(nx - A.lip.x, nz - A.lip.z) < 2.4) { this.startStall(input); return; }
     // walls
     const wall = this.col.obstacle(nx, nz, ny + 0.45, ny + 60);
     if (wall !== null && wall > this.pos.y + 0.45) {
@@ -545,6 +572,108 @@ export class Player {
     if (Math.abs(g.bal) > 1) { this.doBail('balance'); }
   }
 
+  // ---------------- lip tricks (stalls on coping) ----------------
+  startStall(input) {
+    const A = this.air;
+    if (Math.abs(wrapAngle(A.flip)) > 0.8 || !this.animSafe()) { this.pos.copy(A.lip); this.doBail('grind'); return; }
+    if (this.anim) A.tricks.push({ type: this.anim.type, hold: this.anim.holdTime });
+    this.game.tricks.land(A, { flips: Math.round(A.flip / TAU), fakie: false, fakieStart: A.fakieStart, airtime: A.t, height: A.maxY - A.startY, vn: 0, intoGrind: true });
+    this.anim = null; this.animQueue.length = 0;
+    const into = Math.atan2(A.lipN.x, A.lipN.z);        // facing back into the ramp
+    const turned = Math.abs(angleDiff(this.heading, into)) < 1.2;
+    let style, wheelie = 0.5;
+    if (!turned) style = 'Abubaca';                      // came back in backwards: rear wheel on the coping
+    else if (input.flip > 0.4) { style = 'Nosepick'; wheelie = -0.45; }
+    else if (input.flip < -0.4) style = 'Tail Tap';
+    else if (input.steer) { style = 'Disaster'; wheelie = 0; }
+    else style = 'Fufanu';
+    this.stall = { lip: A.lip.clone(), n: A.lipN.clone(), style, wheelie, bal: 0, balVel: (Math.random() - 0.5) * 0.3, time: 0 };
+    this.heading = turned ? into : wrapAngle(into + Math.PI);
+    this.mode = 'stall';
+    this.air = null;
+    this.vel.set(0, 0, 0);
+    this.pos.copy(this.stall.lip); this.pos.y += 0.03;
+    this.normal.set(0, 1, 0);
+    this.game.tricks.grindStart(style);
+    this.emit('stallStart');
+  }
+
+  stepStall(dt, input, jump) {
+    const s = this.stall;
+    s.time += dt;
+    s.balVel += ((Math.random() - 0.5) * 2.6 + s.bal * (1.2 + s.time * 0.35)) * dt;
+    s.balVel -= input.steer * 3.4 * dt;
+    s.balVel *= Math.exp(-0.6 * dt);
+    s.bal += s.balVel * dt;
+    this.game.tricks.stallTick(dt);
+    if (Math.abs(s.bal) > 1) { this.doBail('balance'); return; }
+    if (jump || s.time > 5) {
+      // drop back in
+      this.vel.copy(s.n).multiplyScalar(1.5);
+      this.vel.y = 2.2 + this.preload * 0.8;
+      this.stall = null;
+      this.game.tricks.grindEnd();
+      this.goAir(true);
+      this.air.targetHeading = this.heading; // stay facing the way you stalled
+      this.emit('hop');
+    }
+  }
+
+  // ---------------- wallrides ----------------
+  tryWall(nx, ny, nz) {
+    const hit = this.col.wallNear(nx, nz, ny);
+    if (!hit) return false;
+    const w = hit.w;
+    if (w === this.leftWall && this.air.t < 0.45) return false;
+    const vh = Math.hypot(this.vel.x, this.vel.z);
+    const along = this.vel.x * w.dx + this.vel.z * w.dz;
+    const into = -(this.vel.x * w.nx + this.vel.z * w.nz);
+    // needs speed along the wall, a shallow approach, and to be heading at it (or already touching)
+    if (Math.abs(along) < 3.2 || Math.abs(along) / (vh || 1) < 0.62 || (into < 0.3 && hit.d > 0.2)) return false;
+    const A = this.air;
+    if (Math.abs(wrapAngle(A.flip)) > 0.8 || !this.animSafe()) return false; // the wall check below will deal with it
+    if (this.anim) A.tricks.push({ type: this.anim.type, hold: this.anim.holdTime });
+    this.game.tricks.land(A, { flips: Math.round(A.flip / TAU), fakie: false, fakieStart: A.fakieStart, airtime: A.t, height: A.maxY - A.startY, vn: 0, intoGrind: true });
+    this.anim = null; this.animQueue.length = 0;
+    const dir = along >= 0 ? 1 : -1;
+    this.wall = { w, t: hit.t, dir, speed: Math.abs(along), vy: Math.max(this.vel.y, 0.5) + 1.6 + Math.min(2, into * 0.5), time: 0 };
+    this.mode = 'wall';
+    this.air = null;
+    this.heading = Math.atan2(w.dx * dir, w.dz * dir);
+    this.pos.set(w.ax + w.dx * hit.t + w.nx * 0.03, ny, w.az + w.dz * hit.t + w.nz * 0.03);
+    this.normal.set(w.nx * 0.92, 0.39, w.nz * 0.92).normalize();
+    this.vel.set(0, 0, 0);
+    this.game.tricks.grindStart('Wallride');
+    this.emit('wallStart');
+    return true;
+  }
+
+  stepWall(dt, input, jump) {
+    const W = this.wall, w = W.w;
+    W.time += dt;
+    W.vy -= G * 0.42 * dt;
+    W.speed = Math.max(0, W.speed - 0.9 * dt);
+    W.t += W.speed * W.dir * dt;
+    let y = this.pos.y + W.vy * dt;
+    if (y > w.y1 - 0.4) { y = w.y1 - 0.4; W.vy = Math.min(W.vy, 0); }
+    this.pos.set(w.ax + w.dx * W.t + w.nx * 0.03, y, w.az + w.dz * W.t + w.nz * 0.03);
+    this.game.tricks.grindTick(dt, W.speed * dt);
+    const leave = (push, up) => {
+      this.vel.set(w.dx * W.dir * W.speed + w.nx * push, W.vy + up, w.dz * W.dir * W.speed + w.nz * push);
+      this.pos.x += w.nx * 0.3; this.pos.z += w.nz * 0.3; // clear of the wall face
+      this.leftWall = w;
+      this.wall = null;
+      this.normal.set(0, 1, 0);
+      this.game.tricks.grindEnd();
+      this.emit('wallEnd');
+      this.goAir(up > 1);
+      this.air.fromGrind = true;
+    };
+    if (jump) { W.vy = Math.max(W.vy, 0); leave(3.2, 3.6 + this.preload); this.emit('hop'); return; }
+    const g = this.col.ground(this.pos.x + w.nx * 0.35, this.pos.z + w.nz * 0.35, y + 0.3, this.g2);
+    if (W.t < 0.2 || W.t > w.len - 0.2 || W.time > 1.7 || W.speed < 1.5 || y <= g.h + 0.12) leave(1.6, 0.4);
+  }
+
   // ---------------- manual ----------------
   updateManual(dt, input) {
     const want = input.manual && this.speed > 1.2;
@@ -583,6 +712,7 @@ export class Player {
     if (this.mode === 'bail') return;
     this.mode = 'bail';
     this.grind = null; this.manual = null; this.air = null; this.anim = null; this.animQueue.length = 0;
+    this.stall = null; this.wall = null;
     this.fakie = false;
     const sp = this.vel.length();
     const splash = reason === 'splash' || reason === 'water';
@@ -650,11 +780,12 @@ export class Player {
     // manual wheelie
     let wheelie = 0;
     if (this.manual) wheelie = this.manual.nose ? -(0.32 + this.manual.bal * 0.18) : 0.36 + this.manual.bal * 0.2;
+    if (this.stall) wheelie = this.stall.wheelie;
     this.wheelieVis = damp(this.wheelieVis || 0, wheelie, 12, dt);
     // lean into turns
     const targetLean = this.mode === 'ground' ? clamp(-(this.yawRate || 0) * this.speed / G, -0.6, 0.6) : 0;
     this.lean = damp(this.lean, targetLean, 8, dt);
-    const grindLean = this.grind ? this.grind.bal * 0.35 : 0;
+    const grindLean = this.grind ? this.grind.bal * 0.35 : this.stall ? this.stall.bal * 0.3 : 0;
     q.multiply(tmpQ.setFromAxisAngle(new THREE.Vector3(0, 0, 1), this.lean + grindLean + (this.tableRoll || 0)));
     q.multiply(tmpQ.setFromAxisAngle(new THREE.Vector3(1, 0, 0), pitch));
     m.root.quaternion.copy(q);
@@ -699,6 +830,7 @@ export class Player {
       f(this.wheelieVis || 0), f(P.steer), f(P.barspin), f(P.whip), f(P.crouch, 2), f(P.shift, 2),
       f(P.superman, 2), f(P.nohander, 2), f(P.cancan, 2), f(P.nofooter, 2), f(P.tuck, 2), f(P.crank), f(P.wheel % 100),
       this.mode === 'bail' ? 1 : 0, f(this.vel.length(), 1),
+      f(P.xup, 2), f(P.turndown, 2), f(P.tucknh, 2), f(P.seat, 2), f(P.onefoot, 2),
     ];
   }
 }

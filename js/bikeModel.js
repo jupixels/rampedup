@@ -316,7 +316,7 @@ export class RiderBike {
     this.root.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
 
     // state
-    this.pose = { crank: 0, steer: 0, barspin: 0, whip: 0, crouch: 0, shift: 0, superman: 0, nohander: 0, cancan: 0, nofooter: 0, tuck: 0, wheel: 0 };
+    this.pose = { crank: 0, steer: 0, barspin: 0, whip: 0, crouch: 0, shift: 0, superman: 0, nohander: 0, cancan: 0, nofooter: 0, tuck: 0, wheel: 0, xup: 0, turndown: 0, tucknh: 0, seat: 0, onefoot: 0 };
     this._v = Array.from({ length: 12 }, () => new THREE.Vector3());
     this.nameTag = null;
     this.setColors({});
@@ -382,7 +382,7 @@ export class RiderBike {
   updatePose() {
     const P = this.pose;
     this.forkPivot.rotation.y = P.steer;
-    this.barPivot.rotation.y = P.steer + P.barspin;
+    this.barPivot.rotation.y = P.steer + P.barspin + P.xup * 1.75 + P.turndown * 1.45;
     this.whipPivot.rotation.y = P.whip;
     this.crankSpin.rotation.x = P.crank;
     this.rearSpin.rotation.x = P.wheel;
@@ -400,9 +400,10 @@ export class RiderBike {
 
     const crouch = P.crouch, shift = P.shift;
     const sm = P.superman, nh = P.nohander, cc = P.cancan, nf = P.nofooter, tk = P.tuck;
+    const tn = P.tucknh, st = P.seat, of = P.onefoot, td = P.turndown;
     // pelvis & chest
     const pelvis = v[4].set(0, 1.0 - crouch * 0.25 + sm * 0.08 - tk * 0.12, -0.16 - crouch * 0.08 - shift * 0.22 - sm * 0.3);
-    const chest = v[5].set(0, pelvis.y + 0.42 - crouch * 0.1 - sm * 0.28 + nh * 0.05, pelvis.z + 0.2 + crouch * 0.06 + sm * 0.3 - shift * 0.08 - nh * 0.12);
+    const chest = v[5].set(td * 0.1, pelvis.y + 0.42 - crouch * 0.1 - sm * 0.28 + nh * 0.05 - tn * 0.2 - td * 0.1, pelvis.z + 0.2 + crouch * 0.06 + sm * 0.3 - shift * 0.08 - nh * 0.12 + tn * 0.16 + td * 0.06);
     const spineDir = v[6].subVectors(chest, pelvis).normalize();
     const place = (mesh, a, b) => {
       mesh.position.copy(a).add(b).multiplyScalar(0.5);
@@ -430,6 +431,10 @@ export class RiderBike {
       let hand = grip[i].clone();
       // no-hander: arms out wide
       if (nh > 0) hand.lerp(V(s * 0.75, chest.y + 0.35, chest.z - 0.1), nh);
+      // tuck no-hander: chest down on the bars, arms out low and wide
+      if (tn > 0) hand.lerp(V(s * 0.8, chest.y + 0.02, chest.z + 0.02), tn);
+      // seat grab: one hand reaches back to the seat
+      if (st > 0 && i === 0) hand.lerp(V(-0.03, 0.84, -0.24), st);
       if (P.barspin && Math.abs(Math.sin(P.barspin / 2)) > 0.2) hand.lerp(V(s * 0.25, grip[i].y + 0.05, grip[i].z - 0.1), 0.6);
       const elbow = solveIK(shoulder, hand, 0.3, 0.3, V(s * 0.8, -0.3, -0.6), V());
       J.shoulder[i].copy(shoulder); J.elbow[i].copy(elbow); J.hand[i].copy(hand);
@@ -443,6 +448,7 @@ export class RiderBike {
       if (sm > 0) foot.lerp(V(s * 0.16, pelvis.y + 0.05, pelvis.z - 0.85), sm);
       if (nf > 0) foot.lerp(V(s * 0.5, 0.55, -0.15), nf);
       if (cc > 0 && i === 1) foot.lerp(V(-0.38, 0.7, 0.18), cc);
+      if (of > 0 && i === 1) foot.lerp(V(0.6, 0.5, -0.05), of);
       if (tk > 0) foot.lerp(V(s * 0.12, pelvis.y - 0.3, pelvis.z + 0.25), tk * 0.6);
       const knee = solveIK(hip, foot, 0.45, 0.46, V(s * 0.12, 0.2, 1), V());
       J.hip[i].copy(hip); J.knee[i].copy(knee); J.foot[i].copy(foot);
