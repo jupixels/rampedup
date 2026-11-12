@@ -54,6 +54,7 @@
         <button data-panel="courses">Courses</button>
         <button data-panel="customize">Customize</button>
         <button data-panel="settings">Settings</button>
+        <button data-panel="mods">Mods</button>
         <button data-panel="controls">Guide</button>
       </nav>
       <div class="menu-foot">
@@ -137,6 +138,22 @@
     </div>
   </template>
 
+  <template id="tpl-mods">
+    <div class="panel settings">
+      <h2>Mods</h2>
+      <label class="check"><input type="checkbox" data-bind="modon" id="set-modon"> Turn mods on: retune the bike and the physics</label>
+      <label class="field">Top speed <span class="muted" data-bind="modspeedv"></span><input type="range" min="0.5" max="4" step="0.1" data-bind="modspeed" id="set-modspeed"></label>
+      <label class="field">Acceleration <span class="muted" data-bind="modaccelv"></span><input type="range" min="0.5" max="4" step="0.1" data-bind="modaccel" id="set-modaccel"></label>
+      <label class="field">Jump power <span class="muted" data-bind="modjumpv"></span><input type="range" min="0.5" max="4" step="0.1" data-bind="modjump" id="set-modjump"></label>
+      <label class="field">Gravity <span class="muted" data-bind="modgravityv"></span><input type="range" min="0.2" max="2.5" step="0.1" data-bind="modgravity" id="set-modgravity"></label>
+      <label class="field">Spin speed <span class="muted" data-bind="modspinv"></span><input type="range" min="0.5" max="3" step="0.1" data-bind="modspin" id="set-modspin"></label>
+      <label class="field">Flip speed <span class="muted" data-bind="modflipv"></span><input type="range" min="0.5" max="3" step="0.1" data-bind="modflip" id="set-modflip"></label>
+      <label class="check"><input type="checkbox" data-bind="modbalance" id="set-modbalance"> Easy balance on grinds, manuals and lip tricks</label>
+      <label class="check"><input type="checkbox" data-bind="modnobail" id="set-modnobail"> No crashes: every landing sticks and walls just bounce you (water still gets you)</label>
+      <div class="row"><button class="btn small ghost" data-action="modreset"><span>Reset to stock</span></button></div>
+      <p class="muted small">While modded mode is on, course times, medals, goals, gaps, challenges and XP are not recorded, and your race results are not sent to other riders.</p>
+    </div>
+  </template>
   <template id="tpl-settings">
     <div class="panel settings">
       <h2>Settings</h2>
@@ -170,18 +187,6 @@
       <label class="field">Mouse look sensitivity <input type="range" min="0.3" max="2.5" step="0.1" data-bind="sens" id="set-sens"></label>
       <label class="check"><input type="checkbox" data-bind="invert" id="set-invert"> Invert camera up/down</label>
       <label class="check"><input type="checkbox" data-bind="classic" id="set-classic"> Classic controls (flips and manuals react to keys you are already holding, no fakie riding)</label>
-      <h3>Modded mode</h3>
-      <label class="check"><input type="checkbox" data-bind="modon" id="set-modon"> Modded mode: retune the bike and the physics</label>
-      <label class="field">Top speed <span class="muted" data-bind="modspeedv"></span><input type="range" min="0.5" max="4" step="0.1" data-bind="modspeed" id="set-modspeed"></label>
-      <label class="field">Acceleration <span class="muted" data-bind="modaccelv"></span><input type="range" min="0.5" max="4" step="0.1" data-bind="modaccel" id="set-modaccel"></label>
-      <label class="field">Jump power <span class="muted" data-bind="modjumpv"></span><input type="range" min="0.5" max="4" step="0.1" data-bind="modjump" id="set-modjump"></label>
-      <label class="field">Gravity <span class="muted" data-bind="modgravityv"></span><input type="range" min="0.2" max="2.5" step="0.1" data-bind="modgravity" id="set-modgravity"></label>
-      <label class="field">Spin speed <span class="muted" data-bind="modspinv"></span><input type="range" min="0.5" max="3" step="0.1" data-bind="modspin" id="set-modspin"></label>
-      <label class="field">Flip speed <span class="muted" data-bind="modflipv"></span><input type="range" min="0.5" max="3" step="0.1" data-bind="modflip" id="set-modflip"></label>
-      <label class="check"><input type="checkbox" data-bind="modbalance" id="set-modbalance"> Easy balance on grinds, manuals and lip tricks</label>
-      <label class="check"><input type="checkbox" data-bind="modnobail" id="set-modnobail"> No crashes: every landing sticks and walls just bounce you (water still gets you)</label>
-      <div class="row"><button class="btn small ghost" data-action="modreset"><span>Reset to stock</span></button></div>
-      <p class="muted small">While modded mode is on, course times, medals, goals, gaps, challenges and XP are not recorded, and your race results are not sent to other riders.</p>
       <h3>Key and button bindings</h3>
       <p class="muted small">Click a binding, then press the new key or gamepad button. Esc cancels.</p>
       <div class="bind-list" data-bind="binds"></div>
@@ -364,6 +369,7 @@
         <button data-panel="mp">Multiplayer</button>
         <button data-panel="customize">Customize</button>
         <button data-panel="settings">Settings</button>
+        <button data-panel="mods">Mods</button>
         <button data-panel="controls">Guide</button>
         <button data-action="replay">Instant replay</button>
         <button data-action="photo">Photo mode</button>

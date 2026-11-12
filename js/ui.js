@@ -160,7 +160,7 @@ export class UI {
     host.appendChild(tpl.content.cloneNode(true));
     this.panelEl = host.firstElementChild;
     this.panelOpen = name + host.id;
-    const fn = { mp: 'renderMp', courses: 'renderCourses', customize: 'renderCustomize', settings: 'renderSettings', controls: 'renderGuide' }[name];
+    const fn = { mp: 'renderMp', courses: 'renderCourses', customize: 'renderCustomize', settings: 'renderSettings', mods: 'renderMods', controls: 'renderGuide' }[name];
     if (fn) this[fn]();
   }
 
@@ -347,30 +347,20 @@ export class UI {
     document.querySelector('#btn-tutorial .badge')?.remove();
   }
 
-  renderSettings() {
-    const p = this.panelEl, s = this.game.settings, g = this.game;
-    const bind = (key, get, set, ev = 'input') => {
+  // two-way binding between a settings field and a value
+  binder(p) {
+    const g = this.game;
+    return (key, get, set, ev = 'input') => {
       const el = p.querySelector(`[data-bind=${key}]`);
       if (el.type === 'checkbox') el.checked = !!get(); else el.value = get();
       el.addEventListener(ev, () => { set(el.type === 'checkbox' ? el.checked : el.type === 'range' ? +el.value : el.value); g.saveSettings(); g.applySettings(); this.applyPrefs(); });
     };
-    bind('quality', () => s.quality, (v) => { g.setQuality(v); this.toast('Quality applied. Tree and grass density follow on the next load.'); }, 'change');
-    bind('time', () => s.time, (v) => { s.time = v; g.env.setTime(v); }, 'change');
-    bind('volume', () => g.audio.volume, (v) => g.audio.setVolume(v));
-    bind('music', () => g.audio.musicVol, (v) => g.audio.setMusicVolume(v));
-    bind('sfx', () => g.audio.sfxVol, (v) => g.audio.setSfxVolume(v));
-    bind('mute', () => g.audio.muted, (v) => { if (v !== g.audio.muted) g.audio.toggleMute(); }, 'change');
-    bind('camdist', () => s.camDist, (v) => { s.camDist = v; });
-    bind('fov', () => s.fov, (v) => { s.fov = v; });
-    bind('sens', () => s.sens, (v) => { s.sens = v; });
-    bind('invert', () => s.invert, (v) => { s.invert = v; }, 'change');
-    bind('reduce', () => s.reduceMotion, (v) => { s.reduceMotion = v; }, 'change');
-    bind('mph', () => s.mph, (v) => { s.mph = v; }, 'change');
-    bind('minimap', () => s.minimap !== false, (v) => { s.minimap = v; }, 'change');
-    bind('hints', () => s.hints !== false, (v) => { s.hints = v; }, 'change');
-    bind('fps', () => s.fps, (v) => { s.fps = v; }, 'change');
-    bind('autoq', () => s.autoQuality !== false, (v) => { s.autoQuality = v; }, 'change');
-    bind('classic', () => s.classic, (v) => { s.classic = v; }, 'change');
+  }
+
+  // Mods panel (pause and title menu)
+  renderMods() {
+    const p = this.panelEl, s = this.game.settings;
+    const bind = this.binder(p);
     // modded mode: every slider is a multiplier on the stock bike
     s.mod = Object.assign({ on: false, speed: 1.5, accel: 1.5, jump: 1.5, gravity: 1, spin: 1, flip: 1, balance: false, nobail: false }, s.mod || {});
     const modLabel = () => {
@@ -391,6 +381,28 @@ export class UI {
       modLabel();
     });
     modLabel();
+  }
+
+  renderSettings() {
+    const p = this.panelEl, s = this.game.settings, g = this.game;
+    const bind = this.binder(p);
+    bind('quality', () => s.quality, (v) => { g.setQuality(v); this.toast('Quality applied. Tree and grass density follow on the next load.'); }, 'change');
+    bind('time', () => s.time, (v) => { s.time = v; g.env.setTime(v); }, 'change');
+    bind('volume', () => g.audio.volume, (v) => g.audio.setVolume(v));
+    bind('music', () => g.audio.musicVol, (v) => g.audio.setMusicVolume(v));
+    bind('sfx', () => g.audio.sfxVol, (v) => g.audio.setSfxVolume(v));
+    bind('mute', () => g.audio.muted, (v) => { if (v !== g.audio.muted) g.audio.toggleMute(); }, 'change');
+    bind('camdist', () => s.camDist, (v) => { s.camDist = v; });
+    bind('fov', () => s.fov, (v) => { s.fov = v; });
+    bind('sens', () => s.sens, (v) => { s.sens = v; });
+    bind('invert', () => s.invert, (v) => { s.invert = v; }, 'change');
+    bind('reduce', () => s.reduceMotion, (v) => { s.reduceMotion = v; }, 'change');
+    bind('mph', () => s.mph, (v) => { s.mph = v; }, 'change');
+    bind('minimap', () => s.minimap !== false, (v) => { s.minimap = v; }, 'change');
+    bind('hints', () => s.hints !== false, (v) => { s.hints = v; }, 'change');
+    bind('fps', () => s.fps, (v) => { s.fps = v; }, 'change');
+    bind('autoq', () => s.autoQuality !== false, (v) => { s.autoQuality = v; }, 'change');
+    bind('classic', () => s.classic, (v) => { s.classic = v; }, 'change');
     this.renderBinds();
   }
 
@@ -673,13 +685,13 @@ export class UI {
     // control hints follow the device in use and any rebinding
     if (this.frame % 20 === 0) {
       const L = (a) => g.input.label(a);
-      const hk = g.input.device() + (g.courses.run ? 'c' : '') + (p.fakie ? 'f' : '');
+      const hk = g.input.device() + (g.courses.run ? 'c' : '') + (p.fakie ? 'f' : '') + g.settings.quality;
       if (hk !== this._hintKey) {
         this._hintKey = hk;
         const items = [[L('pedal'), 'pedal'], [L('hop'), 'hop'], [['barspin', 'tailwhip', 'superman'].map(L).join(' '), 'tricks'], [L('manual'), 'manual']];
         if (p.fakie) items.unshift([L('brake'), 'revert']);
         if (g.courses.run) items.push([L('reset'), g.courses.run.opts.race ? 'last gate' : 'restart'], [L('restart'), 'last gate']); else items.push([L('interact'), 'course']);
-        items.push([L('map'), 'map'], [L('pause'), 'menu']);
+        items.push([L('map'), 'map'], [L('quality'), 'graphics: ' + g.settings.quality], [L('pause'), 'menu']);
         el.hints.textContent = '';
         for (const [k, t] of items) { if (!k) continue; const sp = document.createElement('span'); const kb = document.createElement('kbd'); kb.textContent = k; sp.append(kb, ' ' + t); el.hints.appendChild(sp); }
       }

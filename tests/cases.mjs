@@ -939,4 +939,85 @@ export const CASES = [
       return { ok, detail: `hop height ${stock.h.toFixed(2)} m -> ${jump.h.toFixed(2)} m at 2× jump; airtime ${stock.air.toFixed(2)} s -> ${moon.air.toFixed(2)} s at half gravity; no-crash landing stuck=${stuck}; same landing normally bails=${normalBails}` };
     },
   },
+  {
+    name: 'respawn: coming back to a spot up on the mega ramp puts you on it, not underneath',
+    run: () => {
+      const g = window.__game, p = g.player, sim = window.__sim, A = g.world.anchors;
+      // free riding on the deck, then a crash
+      sim.reset(A.megaDeck.x, A.megaDeck.z, 0, true);
+      const deckY = p.pos.y;
+      p.lastSafe.pos.copy(p.pos);
+      p.doBail('hard'); sim.step(30, {}); p.ragdoll.active = false; p.respawnSafe();
+      const free = Math.abs(p.pos.y - deckY) < 0.6;
+      // Big Air Send: pass the air gate, crash, and press Backspace (last gate)
+      const c = g.courses.list.find((x) => x.id === 'bigair');
+      g.courses.start(c, { countdownFrom: 0.05 }); sim.step(10, {});
+      const startY = p.pos.y;
+      const gate = c.gates[0];
+      p.pos.set(gate.x, gate.base, gate.z); p.mode = 'air'; p.air = { t: 1, tricks: [], flip: 0, spin: 0 }; // flying through the ring
+      g.courses.update(1 / 60);
+      const passed = g.courses.run.idx === 1;
+      p.air = null; p.mode = 'ground';
+      p.doBail('hard'); sim.step(30, {}); p.ragdoll.active = false;
+      g.backToSafe();
+      const back = Math.abs(p.pos.y - startY) < 0.6 && Math.hypot(p.pos.x - c.start.x, p.pos.z - c.start.z) < 1.5;
+      // and we can ride away from there
+      sim.step(120, { pedal: 1 });
+      const moved = Math.hypot(p.pos.x - c.start.x, p.pos.z - c.start.z) > 3;
+      g.courses.cancel(true);
+      return { ok: free && passed && back && moved, detail: `free ride back on deck=${free} (deck ${deckY.toFixed(1)} m), air gate passed=${passed}, back at start on the deck=${back}, can ride off=${moved}` };
+    },
+  },
+  {
+    name: 'respawn: a gate on top of a container brings you back on top of it',
+    run: () => {
+      const g = window.__game, p = g.player, sim = window.__sim;
+      const c = g.courses.list.find((x) => x.id === 'docks');
+      const k = c.gates.findIndex((gt) => gt.top);
+      g.courses.start(c, { countdownFrom: 0.05 }); sim.step(10, {});
+      const gt = c.gates[k];
+      g.courses.run.idx = k;
+      p.spawn(gt.x, gt.z, -Math.PI / 2, true); g.courses.update(1 / 60);
+      const passed = g.courses.run.idx === k + 1;
+      p.pos.set(gt.x - 30, g.world.anchors.docksY, gt.z + 20);  // somewhere else, on the ground
+      g.backToSafe();
+      const onTop = Math.abs(p.pos.y - gt.base) < 0.6;
+      g.courses.cancel(true);
+      return { ok: passed && onTop, detail: `passed=${passed} height ${p.pos.y.toFixed(1)} m vs gate ${gt.base.toFixed(1)} m` };
+    },
+  },
+  {
+    name: 'graphics key: G steps through the qualities and the hint bar shows the current one',
+    run: () => {
+      const g = window.__game, sim = window.__sim;
+      sim.reset();
+      const before = g.settings.quality;
+      g.setQuality('low', true);
+      g.cycleQuality();
+      const q1 = g.settings.quality, chosen = g.settings.qualityChosen;
+      for (let i = 0; i < 25; i++) g.ui.update(1 / 60);
+      const hint = document.getElementById('hud-hints').textContent;
+      g.setQuality(before, true); g.settings.qualityChosen = false; g.composer.render(0.016);
+      return { ok: q1 === 'medium' && chosen === true && /G\s+graphics: medium/i.test(hint) && g.input.label('quality') === 'G', detail: `low -> ${q1}; hint bar: "${hint.replace(/\s+/g, ' ').trim()}"` };
+    },
+  },
+  {
+    name: 'mods: the pause menu has a Mods panel that controls the bike',
+    run: () => {
+      const g = window.__game, p = g.player;
+      g.playing = true; g.setPaused(true);
+      const btn = document.querySelector('#pause [data-panel=mods]');
+      btn.click();
+      const panel = document.querySelector('#pause-panel-host .panel');
+      const on = panel.querySelector('[data-bind=modon]'), jump = panel.querySelector('[data-bind=modjump]');
+      on.checked = true; on.dispatchEvent(new Event('change', { bubbles: true }));
+      jump.value = 2.5; jump.dispatchEvent(new Event('input', { bubbles: true }));
+      const applied = g.modded && p.modJump === 2.5;
+      panel.querySelector('[data-action=modreset]').click();
+      on.checked = false; on.dispatchEvent(new Event('change', { bubbles: true }));
+      const off = !g.modded && p.modJump === 1 && !document.querySelector('#tpl-settings').content.querySelector('[data-bind=modon]');
+      g.setPaused(false);
+      return { ok: !!btn && applied && off, detail: `applied=${applied} off=${off}` };
+    },
+  },
 ];
