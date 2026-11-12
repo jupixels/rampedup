@@ -102,6 +102,15 @@ class Game {
 
   saveSettings() { store('settings', this.settings); }
 
+  // G: step through the graphics qualities
+  cycleQuality() {
+    const order = ['low', 'medium', 'high', 'ultra'];
+    const next = order[(order.indexOf(this.settings.quality) + 1) % order.length];
+    this.setQuality(next);
+    this.ui.toast(`Graphics: ${next[0].toUpperCase() + next.slice(1)}`);
+    this.ui._hintKey = null;
+  }
+
   // Shadows are the most expensive pass on laptop graphics. On Low the trees, which are most of
   // its triangles, do not cast.
   // (Redrawing the shadow map only every other frame was tried and removed: with this renderer a
@@ -578,6 +587,7 @@ adaptResolution(rawDt) {
         if (this.ui.mapOpen) this.ui.closeMap();
         else this.setPaused(!this.paused);
       }
+      if (input.qualityPressed && !this.ui.mapOpen) this.cycleQuality();
       if (input.photoPressed && !this.paused && !this.ui.mapOpen) this.photo.enter();
       if (input.replayPressed && !this.paused && !this.ui.mapOpen && !this.spectating) this.replay.enter();
       if (input.mapPressed) { if (this.ui.mapOpen) this.ui.closeMap(); else if (!this.paused) this.ui.openMap(); }

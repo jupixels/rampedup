@@ -275,6 +275,7 @@ export class Courses {
     const g = this.game;
     const p = g.player;
     p.spawn(course.start.x, course.start.z, course.start.yaw, !!course.start.top);
+    p.lastSafe.pos.copy(p.pos); p.lastSafe.heading = course.start.yaw;
     g.cam.snap(p);
     p.frozen = true;
     const color = new THREE.Color(ZONES[course.zone].color);
@@ -447,10 +448,12 @@ export class Courses {
       r.idx++;
       g.audio.play('gate');
       // respawn at the last gate after a bail
-      p.lastSafe.pos.set(gt.x, gt.base, gt.z);
+      // (a gate in mid-air is no place to come back to: keep the previous gate, or the start)
       const nx = r.course.gates[r.idx];
-      if (nx) p.lastSafe.heading = Math.atan2(nx.x - gt.x, nx.z - gt.z);
-      if (gt.y != null) p.lastSafe.pos.set(p.pos.x, p.pos.y, p.pos.z);
+      if (gt.y == null) {
+        p.lastSafe.pos.set(gt.x, gt.base, gt.z);
+        if (nx) p.lastSafe.heading = Math.atan2(nx.x - gt.x, nx.z - gt.z);
+      }
       if (r.idx >= r.course.gates.length) this.finish();
       else this.updateGateVisibility();
     }

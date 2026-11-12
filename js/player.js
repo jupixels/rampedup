@@ -92,8 +92,10 @@ export class Player {
     this.brakeLock = false;
   }
 
-  spawn(x, z, heading, onTop = false) {
-    const g = this.col.ground(x, z, onTop ? 500 : this.col.terrain.sample(x, z) + 3, this.ground);
+  // yTop: put the rider on the highest surface at or below this height (used when coming back
+  // to a spot that was up on a ramp, a roof or a container, so you never appear underneath it)
+  spawn(x, z, heading, onTop = false, yTop = null) {
+    const g = this.col.ground(x, z, yTop !== null ? yTop : onTop ? 500 : this.col.terrain.sample(x, z) + 3, this.ground);
     this.pos.set(x, g.h, z);
     this.vel.set(0, 0, 0);
     this.heading = this.visHeading = heading;
@@ -755,7 +757,8 @@ export class Player {
   respawnSafe() {
     const s = this.lastSafe;
     const tumble = this.bail ? this.bail.dist : 0;
-    this.spawn(s.pos.x, s.pos.z, s.heading);
+    // back onto the surface you were actually on, not whatever is at ground level beneath it
+    this.spawn(s.pos.x, s.pos.z, s.heading, false, s.pos.y + 1.0);
     this.emit('respawn', { tumble });
   }
 

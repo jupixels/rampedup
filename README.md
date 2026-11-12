@@ -36,7 +36,7 @@ Share `?room=CODE` links to drop friends straight into your session.
 - **Photo mode** (P) — freeze the moment, fly the camera, change the light and lens, hide the rider, and save a PNG.
 - **Instant replay** (V) — the last 20 seconds are always recorded. Watch them back with an orbit camera and slow motion, and save the clip as a video file.
 - **Installable** — add it to your home screen or desktop; once loaded it also runs offline.
-- **Modded mode** — retune the bike in Settings: top speed, acceleration, jump power, gravity, spin and flip speed, easy balance and no-crash landings. Records are paused while it is on.
+- **Mods** — retune the bike from the Mods button in the pause or title menu: top speed, acceleration, jump power, gravity, spin and flip speed, easy balance and no-crash landings. Records are paused while it is on.
 - **Split times** — every gate shows how far ahead of or behind your best run you are.
 - **Settings** — separate music and effects volume, camera distance, field of view, mouse sensitivity, invert, reduce motion, mph, minimap toggle.
 - **Controls** — keyboard, gamepad (standard layout, including menu navigation) and touch. Every key and button can be rebound in Settings, and on-screen prompts follow the device you are using.
@@ -64,6 +64,7 @@ Pick **Tutorial** in the main menu for a 16-step guided run (pedal, hop, air, sp
 | Camera · Map | C · M | Right stick click · Left stick click |
 | Chat · Riders | T · Tab | — |
 | Photo mode · Instant replay | P · V | bind in Settings |
+| Change graphics quality | G | bind in Settings |
 | Pause | Esc | Start |
 
 Grinding is automatic: land on a rail or ledge roughly lined up with it. Hold W/S/A/D as you lock on to pick the grind (Icepick, Feeble, Smith…), balance with A/D, and hop off with Space.
