@@ -174,8 +174,13 @@ export class Input {
   }
 
   pollPad(s) {
-    const pads = navigator.getGamepads ? navigator.getGamepads() : [];
-    const p = [...pads].find((x) => x && x.connected);
+    // Some places the game can be opened (a preview pane, an embedded frame) forbid gamepad
+    // access, and asking throws. Ask once; if it is refused, stop asking for good.
+    if (this.padBlocked) return;
+    let pads;
+    try { pads = navigator.getGamepads ? navigator.getGamepads() : []; }
+    catch (e) { this.padBlocked = true; return; }
+    const p = [...(pads || [])].find((x) => x && x.connected);
     if (!p) return;
     const b = (i) => i != null && !!(p.buttons[i] && p.buttons[i].pressed);
     const bv = (i) => (i != null && p.buttons[i] ? p.buttons[i].value : 0);

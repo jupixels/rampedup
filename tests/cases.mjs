@@ -1107,4 +1107,18 @@ export const CASES = [
       return { ok: floor - slab > 0.02 && floor - slab < 0.06 && !sim.has('ev:bail'), detail: `floor is ${((floor - slab) * 100).toFixed(1)} cm above the slab; ride along it: ${sim.has('ev:bail') ? 'crashed' : 'clean'}` };
     },
   },
+  {
+    name: 'gamepad: when the browser forbids gamepad access the game carries on and stops asking',
+    run: () => {
+      const g = window.__game, inp = g.input;
+      const real = navigator.getGamepads; let calls = 0;
+      navigator.getGamepads = () => { calls++; throw new DOMException("Access to the feature \"gamepad\" is disallowed by permissions policy.", 'SecurityError'); };
+      inp.padBlocked = false;
+      let threw = false, s;
+      try { for (let i = 0; i < 5; i++) { window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyW' })); s = inp.poll(); } } catch (e) { threw = true; }
+      window.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyW' })); 
+      navigator.getGamepads = real; inp.padBlocked = false; inp.poll();
+      return { ok: !threw && calls === 1 && s && s.pedal === 1, detail: `threw=${threw} asked ${calls} time(s) in 5 frames, keyboard still works=${!!(s && s.pedal === 1)}` };
+    },
+  },
 ];
